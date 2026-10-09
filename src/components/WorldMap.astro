@@ -1,0 +1,159 @@
+---
+/**
+ * WorldMap — 全球城市足迹地图
+ *
+ * ⚠️ 关键：Leaflet 仅在下方 <script>（客户端模块）中 import，
+ *    绝不在 frontmatter 中 import。这样 Astro SSG 构建时不会
+ *    执行 Leaflet（其内部引用 window），从而避免 "window is not defined"。
+ */
+import citiesData from '../data/cities.json';
+
+const cities = citiesData.cities;
+---
+
+<div class="relative w-full h-screen overflow-hidden">
+  <!-- 地图容器 -->
+  <div id="world-map" class="absolute inset-0"></div>
+
+  <!-- 嵌入城市数据（供客户端脚本读取） -->
+  <script type="application/json" id="map-cities-data">
+    {JSON.stringify(cities)}
+  </script>
+
+  <!-- 顶部标题 -->
+  <header class="pointer-events-none absolute top-0 left-0 right-0 z-[1000] p-6">
+    <div class="pointer-events-auto inline-flex flex-col">
+      <h1 class="text-2xl font-bold text-white tracking-tight drop-shadow-lg">
+        🌍 Travel Footprint
+      </h1>
+      <p class="text-sm text-slate-400 mt-1">
+        点击城市标记查看足迹 · 共 {cities.length} 个城市
+      </p>
+    </div>
+  </header>
+
+  <!-- 城市详情抽屉 -->
+  <aside
+    id="city-drawer"
+    class="drawer absolute top-0 right-0 z-[1100] h-full w-80 max-w-[85vw] bg-ink-800/95 backdrop-blur-md border-l border-ink-600 shadow-2xl"
+  >
+    <div class="flex flex-col h-full p-6">
+      <button
+        id="drawer-close"
+        class="self-end text-slate-400 hover:text-white transition-colors"
+        aria-label="关闭"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <div id="drawer-content" class="flex-1 overflow-y-auto mt-2">
+        <p class="text-slate-500 text-sm">点击地图上的城市标记查看详情</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+  // 客户端模块：此处 import 的 leaflet 只会在浏览器执行
+  import L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  // 读取嵌入的城市数据
+  const dataEl = document.getElementById('map-cities-data');
+  const cities = JSON.parse(dataEl!.textContent!);
+
+  // 初始化地图（暗色底图：CartoDB Dark Matter，无需 API Key，WGS84 坐标）
+  const map = L.map('world-map', {
+    center: [30, 110],
+    zoom: 3,
+    minZoom: 2,
+    zoomControl: true,
+    attributionControl: true,
+  });
+
+  L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19,
+    }
+  ).addTo(map);
+
+  // 自定义标记（避免 Leaflet 默认图标路径在打包后丢失）
+  const createMarker = () =>
+    L.divIcon({
+      className: '',
+      html: '<div class="travel-marker"></div>',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+
+  // 渲染城市标记
+  const markers: L.Marker[] = [];
+  for (const city of cities) {
+    const marker = L.marker([city.lat, city.lng], { icon: createMarker() }).addTo(map);
+
+    // 悬浮 Tooltip
+    marker.bindTooltip(
+      `<strong>${city.name}</strong><br/><span style="color:#94a3b8;font-size:11px">${city.name_en} · ${city.country}</span>`,
+      { className: 'city-tooltip', direction: 'top', offset: [0, -8] }
+    );
+
+    // 点击 → 打开抽屉
+    marker.on('click', () => openDrawer(city));
+    markers.push(marker);
+  }
+
+  // 自适应视野：聚焦所有城市
+  if (markers.length > 0) {
+    const group = L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.3));
+  }
+
+  // 抽屉逻辑
+  const drawer = document.getElementById('city-drawer')!;
+  const drawerContent = document.getElementById('drawer-content')!;
+  const closeBtn = document.getElementById('drawer-close')!;
+
+  function openDrawer(city: any) {
+    drawerContent.innerHTML = `
+      <div class="space-y-4">
+        <div>
+          <p class="text-xs uppercase tracking-wider text-accent font-semibold">${city.country}</p>
+          <h2 class="text-3xl font-bold text-white mt-1">${city.name}</h2>
+          <p class="text-slate-400 text-sm">${city.name_en}</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="bg-ink-700/60 rounded-lg p-3">
+            <p class="text-slate-500 text-xs">纬度</p>
+            <p class="text-white font-mono">${city.lat.toFixed(4)}</p>
+          </div>
+          <div class="bg-ink-700/60 rounded-lg p-3">
+            <p class="text-slate-500 text-xs">经度</p>
+            <p class="text-white font-mono">${city.lng.toFixed(4)}</p>
+          </div>
+        </div>
+        <p class="text-slate-300 text-sm leading-relaxed">${city.description ?? ''}</p>
+        <a
+          href="/city/${city.city_id}"
+          class="block text-center bg-accent hover:bg-accent-glow text-ink-900 font-semibold py-2.5 rounded-lg transition-colors"
+        >
+          查看城市详情 →
+        </a>
+      </div>
+    `;
+    drawer.classList.add('open');
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('open');
+  }
+
+  closeBtn.addEventListener('click', closeDrawer);
+  // 点击地图空白处关闭抽屉
+  map.on('click', closeDrawer);
+</script>

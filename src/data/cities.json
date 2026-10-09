@@ -1,0 +1,31 @@
+{
+  "cities": [
+    {
+      "city_id": "beijing",
+      "name": "北京",
+      "name_en": "Beijing",
+      "country": "中国",
+      "lat": 39.9042,
+      "lng": 116.4074,
+      "description": "千年古都，长城与紫禁城的故乡。"
+    },
+    {
+      "city_id": "tokyo",
+      "name": "东京",
+      "name_en": "Tokyo",
+      "country": "日本",
+      "lat": 35.6762,
+      "lng": 139.6503,
+      "description": "繁华与传统交织的霓虹之都。"
+    },
+    {
+      "city_id": "shanghai",
+      "name": "上海",
+      "name_en": "Shanghai",
+      "country": "中国",
+      "lat": 31.2304,
+      "lng": 121.4737,
+      "description": "东方魔都，黄浦江畔的摩天森林。"
+    }
+  ]
+}
