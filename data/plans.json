@@ -9,13 +9,7 @@
           "id": "plan-mv22l3t6-d1-mv22l3t6",
           "date": "2026-10-10",
           "title": "Day 1",
-          "tasks": [
-            {
-              "id": "plan-mv22l3t6-d1t1-mv22l3t6",
-              "name": "1",
-              "done": false
-            }
-          ]
+          "tasks": []
         }
       ]
     }
