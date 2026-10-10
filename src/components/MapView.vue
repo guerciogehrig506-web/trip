@@ -13,10 +13,13 @@ const mapEl = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 const markerLayer = L.layerGroup()
 
-// 地图瓦片源（按序回退）：优先全球通用的 Carto，加载失败自动切换到下一个。
-// 注意：高德瓦片仅覆盖中国大陆，国外坐标会返回 HTTP 200 的空白瓦片
-// （不会触发 tileerror），因此不能放在首位，否则国外区域会一直空白。
+// 地图瓦片源（按序回退）：优先国内高德，仅产生网络错误时切换到下一个源。
 const TILE_PROVIDERS: Array<{ name: string; url: string; opts: L.TileLayerOptions }> = [
+  {
+    name: '高德',
+    url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+    opts: { subdomains: '1234', maxZoom: 18, attribution: '&copy; 高德地图' },
+  },
   {
     name: 'Carto',
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
@@ -26,11 +29,6 @@ const TILE_PROVIDERS: Array<{ name: string; url: string; opts: L.TileLayerOption
     name: 'OSM',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     opts: { subdomains: 'abc', maxZoom: 19, attribution: '&copy; OpenStreetMap' },
-  },
-  {
-    name: '高德',
-    url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-    opts: { subdomains: '1234', maxZoom: 18, attribution: '&copy; 高德地图' },
   },
 ]
 let tileLayer: L.TileLayer | null = null
@@ -69,6 +67,7 @@ const addSheetOpen = ref(false)
 const pickedCoord = ref<[number, number] | null>(null)
 const savingCity = ref(false)
 const addError = ref<string | null>(null)
+const locateMsg = ref<string | null>(null)
 let pickedMarker: L.Marker | null = null
 
 // 选点后逆地理编码结果，用于自动填入表单
@@ -316,6 +315,33 @@ function maybePromptAmapKey() {
   if (amapKey.value.trim() || amapPrompted) return
   amapPrompted = true
   emit('request-config')
+}
+
+// 底部「定位图标」：跳转到当前定位，失败时给出提示
+let locateMsgTimer: number | undefined
+function flashLocate(msg: string) {
+  locateMsg.value = msg
+  if (locateMsgTimer) window.clearTimeout(locateMsgTimer)
+  locateMsgTimer = window.setTimeout(() => {
+    locateMsg.value = null
+  }, 3000)
+}
+
+function locateMe() {
+  if (!('geolocation' in navigator)) {
+    flashLocate('当前浏览器不支持定位。')
+    return
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords
+      map?.flyTo([latitude, longitude], 12)
+    },
+    () => {
+      flashLocate('无法获取定位，请检查浏览器定位权限。')
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+  )
 }
 
 function onLocationFound(e: L.LocationEvent) {
@@ -731,7 +757,17 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Locate status toast removed: bottom-bar locate button is now inert -->
+    <!-- Locate status toast -->
+    <Transition name="fade">
+      <div
+        v-if="locateMsg"
+        class="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-6 pointer-events-none"
+      >
+        <div class="bg-slate-900/85 text-white text-xs px-4 py-2 rounded-full shadow-lg">
+          {{ locateMsg }}
+        </div>
+      </div>
+    </Transition>
 
     <!-- Bottom floating action capsule -->
     <div class="absolute bottom-0 left-0 right-0 z-20 pb-safe">
@@ -739,11 +775,14 @@ onUnmounted(() => {
         <div class="flex items-center gap-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-full shadow-xl border border-slate-200/60 dark:border-slate-700/60 p-1.5">
           <button
             class="flex items-center justify-center w-10 h-10 rounded-full active:bg-slate-100 dark:active:bg-slate-800 text-slate-600 dark:text-slate-300"
-            title="定位（暂不可用）"
+            title="定位"
+            @click="locateMe"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+              <circle cx="12" cy="12" r="7.5" stroke-width="2" />
+              <path stroke-linecap="round" stroke-width="2" d="M12 1.5V4M12 20v2.5M1.5 12H4M20 12h2.5" />
+              <circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none" />
+            </svg>
           </button>
 
           <div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
