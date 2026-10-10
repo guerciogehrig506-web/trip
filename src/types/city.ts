@@ -1,4 +1,5 @@
 export interface CityProperties {
+  id: string
   name: string
   country: string
   visited: boolean
@@ -6,6 +7,8 @@ export interface CityProperties {
   summary: string
   notes?: string
   cover?: string
+  /** Path to the city's markdown travel log, e.g. "logs/tokyo.md" */
+  log?: string
 }
 
 export interface CityFeature {
