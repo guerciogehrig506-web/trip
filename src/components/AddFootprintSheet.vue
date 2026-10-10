@@ -21,6 +21,15 @@ const name = ref('')
 const country = ref('')
 const visited = ref(true)
 
+// 可拖拽抽屉：通过顶部把手上下滑动，调整表单在屏幕上的显示占比
+const SHEET_MIN = 14
+const SHEET_MAX = 88
+const SHEET_DEFAULT = 45
+const sheetPct = ref(SHEET_DEFAULT)
+let dragging = false
+let startY = 0
+let startPct = SHEET_DEFAULT
+
 const coordText = computed(() => {
   if (!props.coord) return ''
   const [lng, lat] = props.coord
@@ -41,9 +50,43 @@ watch(
       name.value = ''
       country.value = ''
       visited.value = true
+      sheetPct.value = SHEET_DEFAULT
     }
   },
 )
+
+// 选点成功后自动把抽屉拉高，方便查看坐标与填写表单
+watch(
+  () => props.coord,
+  (c) => {
+    if (c && sheetPct.value < 62) sheetPct.value = 62
+  },
+)
+
+function clampPct(v: number) {
+  return Math.min(SHEET_MAX, Math.max(SHEET_MIN, v))
+}
+
+function onDragStart(e: PointerEvent) {
+  dragging = true
+  startY = e.clientY
+  startPct = sheetPct.value
+  const el = e.currentTarget as HTMLElement
+  if (typeof el.setPointerCapture === 'function') {
+    el.setPointerCapture(e.pointerId)
+  }
+}
+
+function onDragMove(e: PointerEvent) {
+  if (!dragging) return
+  const dy = startY - e.clientY // 上滑为正（拉高）
+  const dpct = (dy / window.innerHeight) * 100
+  sheetPct.value = clampPct(startPct + dpct)
+}
+
+function onDragEnd() {
+  dragging = false
+}
 
 function close() {
   emit('update:modelValue', false)
@@ -70,13 +113,23 @@ function submit() {
         <div class="absolute inset-0 bg-black/30 pointer-events-none"></div>
 
         <!-- Sheet -->
-        <div class="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto">
+        <div
+          class="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto"
+          :style="{ height: sheetPct + 'vh' }"
+        >
           <!-- Drag handle -->
-          <div class="flex justify-center pt-3 pb-1 shrink-0">
+          <div
+            class="flex justify-center pt-3 pb-1 shrink-0 cursor-grab active:cursor-grabbing"
+            style="touch-action: none"
+            @pointerdown="onDragStart"
+            @pointermove="onDragMove"
+            @pointerup="onDragEnd"
+            @pointercancel="onDragEnd"
+          >
             <div class="h-1.5 w-10 rounded-full bg-slate-300 dark:bg-slate-600"></div>
           </div>
 
-          <div class="px-5 pt-1 overflow-y-auto no-scrollbar flex-1" style="max-height: 55vh">
+          <div class="px-5 pt-1 overflow-y-auto no-scrollbar flex-1">
             <!-- Header -->
             <div class="flex items-start justify-between mb-3">
               <div>

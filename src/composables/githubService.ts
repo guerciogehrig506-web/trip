@@ -121,15 +121,26 @@ export const githubService = {
     )
     const message = `${commitMessage} [v${version}]`
 
-    const { data } = await octokit.rest.repos.createOrUpdateFileContents({
+    const params: {
+      owner: string
+      repo: string
+      path: string
+      message: string
+      content: string
+      branch: string
+      sha?: string
+    } = {
       owner: owner.value,
       repo: repo.value,
       path,
       message,
       content: btoa(unescape(encodeURIComponent(content))),
-      sha,
       branch: branch.value,
-    })
+    }
+    // 首次创建文件时没有旧 sha，需省略该字段而不是传空串。
+    if (sha) params.sha = sha
+
+    const { data } = await octokit.rest.repos.createOrUpdateFileContents(params)
 
     return {
       commitSha: data.commit.sha ?? '',

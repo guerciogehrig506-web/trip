@@ -36,17 +36,25 @@ async function loadPlans(forceLocal = false): Promise<void> {
       source.value = 'local'
     }
   } catch (e: any) {
-    error.value = e?.message ?? '加载行程数据失败'
-    plans.value = []
-    if (source.value === 'github' || forceLocal === false) {
-      try {
-        const res = await fetch(LOCAL_FALLBACK)
-        const json = (await res.json()) as PlansData
-        plans.value = json.plans ?? []
-        source.value = 'local'
-        error.value = null
-      } catch {
-        /* keep error */
+    // 仓库里还没有 data/plans.json：视为空计划，仍切换到 GitHub 模式。
+    if (hasConfig.value && !forceLocal && e?.status === 404) {
+      plans.value = []
+      sha.value = ''
+      source.value = 'github'
+      error.value = null
+    } else {
+      error.value = e?.message ?? '加载行程数据失败'
+      plans.value = []
+      if (source.value === 'github' || forceLocal === false) {
+        try {
+          const res = await fetch(LOCAL_FALLBACK)
+          const json = (await res.json()) as PlansData
+          plans.value = json.plans ?? []
+          source.value = 'local'
+          error.value = null
+        } catch {
+          /* keep error */
+        }
       }
     }
   } finally {

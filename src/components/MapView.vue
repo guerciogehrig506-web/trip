@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useCities } from '@/composables/useCities'
@@ -31,6 +31,20 @@ const searchQuery = ref('')
 const visitedOnly = ref(false)
 const filterVisible = ref(false)
 
+// 过滤后的城市列表：既用于地图标记，也用于搜索下拉结果
+const filteredCities = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return cities.value.filter((feature) => {
+    const { name, country, visited } = feature.properties
+    if (visitedOnly.value && !visited) return false
+    if (q && !name.toLowerCase().includes(q) && !country.toLowerCase().includes(q)) return false
+    return true
+  })
+})
+
+// 搜索下拉是否展示
+const showResults = computed(() => searchQuery.value.trim().length > 0)
+
 // Secret config trigger: click the status pill 5 times
 const secretClicks = ref(0)
 let secretTimer: number | undefined
@@ -49,7 +63,6 @@ function onSecretClick() {
 
 // Stats for the top bar
 const visitedCount = ref(0)
-const totalCount = ref(0)
 
 function buildIcon(visited: boolean): L.DivIcon {
   const color = visited ? '#10b981' : '#f59e0b'
@@ -69,12 +82,8 @@ function buildIcon(visited: boolean): L.DivIcon {
 
 function renderMarkers() {
   markerLayer.clearLayers()
-  const q = searchQuery.value.trim().toLowerCase()
-  cities.value.forEach((feature) => {
-    const { name, country, visited } = feature.properties
-    if (visitedOnly.value && !visited) return
-    if (q && !name.toLowerCase().includes(q) && !country.toLowerCase().includes(q)) return
-
+  filteredCities.value.forEach((feature) => {
+    const { visited } = feature.properties
     const [lng, lat] = feature.geometry.coordinates
     const marker = L.marker([lat, lng], { icon: buildIcon(visited) })
     marker.on('click', () => {
@@ -85,15 +94,37 @@ function renderMarkers() {
   })
 }
 
-function fitToCities() {
-  if (!map || cities.value.length === 0) return
+function fitFeatures(features: CityFeature[]) {
+  if (!map || features.length === 0) return
   const bounds = L.latLngBounds(
-    cities.value.map((f) => {
+    features.map((f) => {
       const [lng, lat] = f.geometry.coordinates
       return [lat, lng] as [number, number]
     }),
   )
   map.fitBounds(bounds, { padding: [60, 60], maxZoom: 4 })
+}
+
+function fitToCities() {
+  fitFeatures(cities.value)
+}
+
+function onSelectResult(feature: CityFeature) {
+  const [lng, lat] = feature.geometry.coordinates
+  map?.flyTo([lat, lng], 10)
+  selectedCity.value = feature
+  sheetOpen.value = true
+  searchQuery.value = ''
+}
+
+function performSearch() {
+  const results = filteredCities.value
+  if (results.length === 0) return
+  if (results.length === 1) {
+    onSelectResult(results[0])
+  } else {
+    fitFeatures(results)
+  }
 }
 
 function locateMe() {
@@ -169,7 +200,6 @@ async function onSaveFootprint(form: {
       visited: form.visited,
     })
     addSheetOpen.value = false
-    totalCount.value = cities.value.length
     visitedCount.value = cities.value.filter((c) => c.properties.visited).length
     renderMarkers()
     fitToCities()
@@ -184,7 +214,7 @@ async function onSaveFootprint(form: {
   }
 }
 
-watch([searchQuery, visitedOnly], () => {
+watch(filteredCities, () => {
   renderMarkers()
 })
 
@@ -192,7 +222,6 @@ watch([searchQuery, visitedOnly], () => {
 // 使「去配置连接 GitHub」/「添加足迹」按钮与数据源状态同步刷新。
 watch(configVersion, async () => {
   await loadCities()
-  totalCount.value = cities.value.length
   visitedCount.value = cities.value.filter((c) => c.properties.visited).length
   renderMarkers()
   fitToCities()
@@ -232,7 +261,6 @@ onMounted(async () => {
 
   // Load cities and render
   await loadCities()
-  totalCount.value = cities.value.length
   visitedCount.value = cities.value.filter((c) => c.properties.visited).length
   renderMarkers()
   fitToCities()
@@ -259,14 +287,29 @@ onUnmounted(() => {
       <div class="px-3 pt-3 pb-2 bg-gradient-to-b from-black/30 to-transparent">
         <div class="flex items-center gap-2">
           <div class="flex-1 flex items-center bg-white/90 dark:bg-slate-900/90 backdrop-blur rounded-full shadow-md px-3 py-2">
-            <svg class="w-4 h-4 text-slate-400 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <button
+              class="text-slate-400 mr-2 shrink-0 active:text-brand-600"
+              title="搜索"
+              aria-label="搜索"
+              @click="performSearch"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
             <input
               v-model="searchQuery"
               placeholder="搜索城市或国家"
               class="flex-1 bg-transparent outline-none text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 min-w-0"
+              @keyup.enter="performSearch"
             />
+            <button
+              v-if="searchQuery"
+              class="ml-1 text-xs text-slate-400 px-1.5"
+              @click="searchQuery = ''"
+            >
+              ×
+            </button>
             <button
               class="ml-1 text-xs text-slate-500 px-1.5"
               @click="filterVisible = !filterVisible"
@@ -278,6 +321,32 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- Search results dropdown -->
+        <div
+          v-if="showResults"
+          class="mt-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-lg border border-slate-200/60 dark:border-slate-700/60 overflow-hidden max-h-72 overflow-y-auto no-scrollbar"
+        >
+          <button
+            v-for="f in filteredCities"
+            :key="f.properties.id"
+            class="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800 border-b border-slate-100 dark:border-slate-800 last:border-0"
+            @click="onSelectResult(f)"
+          >
+            <span
+              class="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+              :class="f.properties.visited ? 'bg-emerald-500' : 'bg-amber-500'"
+            ></span>
+            <span class="flex-1 min-w-0">
+              <span class="text-sm font-medium text-slate-800 dark:text-slate-100">{{ f.properties.name }}</span>
+              <span class="ml-2 text-xs text-slate-400">{{ f.properties.country }}</span>
+            </span>
+            <span class="text-xs text-slate-400 shrink-0">定位</span>
+          </button>
+          <div v-if="filteredCities.length === 0" class="px-3 py-3 text-sm text-slate-400">
+            未找到与「{{ searchQuery }}」匹配的城市
+          </div>
+        </div>
+
         <!-- Status pill (5-click to open config) -->
         <div
           class="mt-2 flex items-center justify-between px-1 select-none"
@@ -285,7 +354,7 @@ onUnmounted(() => {
         >
           <div class="flex items-center gap-1.5 text-xs text-white drop-shadow">
             <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            已到访 <b class="text-white">{{ visitedCount }}</b> / {{ totalCount }}
+            已到访 <b class="text-white">{{ visitedCount }}</b>
           </div>
           <div class="text-xs text-white/80 drop-shadow">
             {{ source === 'github' ? 'GitHub 数据' : '本地示例' }}

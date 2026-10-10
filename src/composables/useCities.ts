@@ -37,18 +37,27 @@ async function loadCities(forceLocal = false): Promise<CitiesData> {
       source.value = 'local'
     }
   } catch (e: any) {
-    error.value = e?.message ?? '加载城市数据失败'
-    // On GitHub failure, try local fallback once.
-    if (source.value === 'github' || forceLocal === false) {
-      try {
-        const res = await fetch(LOCAL_FALLBACK)
-        const json = (await res.json()) as CitiesGeoJSON
-        cities.value = json.features ?? []
-        sha.value = ''
-        source.value = 'local'
-        error.value = null
-      } catch {
-        /* keep original error */
+    // 仓库里还没有 data/cities.geojson：视为空数据集，仍切换到 GitHub 模式，
+    // 以便保存第一个足迹时创建该文件（按钮也会正确切换为「保存足迹」）。
+    if (hasConfig.value && !forceLocal && e?.status === 404) {
+      cities.value = []
+      sha.value = ''
+      source.value = 'github'
+      error.value = null
+    } else {
+      error.value = e?.message ?? '加载城市数据失败'
+      // On GitHub failure, try local fallback once.
+      if (source.value === 'github' || forceLocal === false) {
+        try {
+          const res = await fetch(LOCAL_FALLBACK)
+          const json = (await res.json()) as CitiesGeoJSON
+          cities.value = json.features ?? []
+          sha.value = ''
+          source.value = 'local'
+          error.value = null
+        } catch {
+          /* keep original error */
+        }
       }
     }
   } finally {
@@ -86,7 +95,7 @@ async function addCity(input: {
   if (!name) throw new Error('请输入城市名')
   if (!country) throw new Error('请输入国家/地区')
 
-  if (source.value !== 'github' || !sha.value) {
+  if (source.value !== 'github') {
     throw new Error('未连接 GitHub，无法保存足迹。请先在设置中配置仓库。')
   }
 
