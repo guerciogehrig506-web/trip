@@ -67,6 +67,7 @@ const addSheetOpen = ref(false)
 const pickedCoord = ref<[number, number] | null>(null)
 const savingCity = ref(false)
 const addError = ref<string | null>(null)
+const locateMsg = ref<string | null>(null)
 let pickedMarker: L.Marker | null = null
 
 // 选点后逆地理编码结果，用于自动填入表单
@@ -297,18 +298,51 @@ async function runSearch() {
 }
 
 function performSearch() {
+  const q = searchQuery.value.trim()
+  if (q) maybePromptAmapKey()
   // 本地已保存的足迹若唯一匹配，直接定位；否则触发全网搜索。
   const results = filteredCities.value
-  if (searchQuery.value.trim() && results.length === 1) {
+  if (q && results.length === 1) {
     onSelectResult(results[0])
     return
   }
   runSearch()
 }
 
+// 首次未配置高德 Key 时，搜索后自动提示一次配置弹窗（会话内仅提示一次）
+let amapPrompted = false
+function maybePromptAmapKey() {
+  if (amapKey.value.trim() || amapPrompted) return
+  amapPrompted = true
+  emit('request-config')
+}
+
+let locateMsgTimer: number | undefined
+function flashLocate(msg: string) {
+  locateMsg.value = msg
+  if (locateMsgTimer) window.clearTimeout(locateMsgTimer)
+  locateMsgTimer = window.setTimeout(() => {
+    locateMsg.value = null
+  }, 3000)
+}
+
 function locateMe() {
   if (!map) return
-  map.locate({ setView: true, maxZoom: 6 })
+  locateMsg.value = null
+  if (!('geolocation' in navigator)) {
+    flashLocate('当前浏览器不支持定位。')
+    return
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords
+      map?.flyTo([latitude, longitude], 12)
+    },
+    () => {
+      flashLocate('无法获取定位，请检查浏览器定位权限。')
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+  )
 }
 
 function onLocationFound(e: L.LocationEvent) {
@@ -705,6 +739,18 @@ onUnmounted(() => {
         加载城市数据…
       </div>
     </div>
+
+    <!-- Locate status toast -->
+    <Transition name="fade">
+      <div
+        v-if="locateMsg"
+        class="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-6 pointer-events-none"
+      >
+        <div class="bg-slate-900/85 text-white text-xs px-4 py-2 rounded-full shadow-lg">
+          {{ locateMsg }}
+        </div>
+      </div>
+    </Transition>
 
     <!-- Bottom floating action capsule -->
     <div class="absolute bottom-0 left-0 right-0 z-20 pb-safe">

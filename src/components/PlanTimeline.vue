@@ -185,7 +185,7 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
               </div>
             </section>
 
-            <div v-if="plans.length === 0" class="text-center py-10">
+            <div v-if="plans.length === 0 && plannedFootprints.length === 0" class="text-center py-10">
               <p class="text-sm text-slate-400 mb-4">暂无行程计划。</p>
               <button
                 class="inline-flex items-center gap-1.5 rounded-full bg-brand-600 text-white pl-4 pr-5 py-2.5 text-sm font-semibold active:bg-brand-700"
