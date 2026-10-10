@@ -12,7 +12,7 @@ const emit = defineEmits<{
   (e: 'request-config'): void
 }>()
 
-const { plans, loading, error, source, syncingTaskId, syncError, loadPlans, addPlan, toggleTask } =
+const { plans, loading, error, source, syncingTaskId, syncError, loadPlans, addPlan, updatePlan, toggleTask } =
   usePlans()
 const { cities, loadCities } = useCities()
 const { configVersion } = useConfig()
@@ -21,6 +21,8 @@ const visible = computed(() => props.modelValue)
 
 const editorOpen = ref(false)
 const editorCityName = ref('')
+/** 正在编辑的行程（非空表示编辑模式，否则为新建） */
+const editingPlan = ref<CityPlan | null>(null)
 const savingPlan = ref(false)
 const planError = ref<string | null>(null)
 
@@ -53,8 +55,13 @@ function openEditor() {
 }
 
 function startPlanFor(cityName: string) {
+  startEdit(null, cityName)
+}
+
+function startEdit(plan: CityPlan | null, cityName = '') {
   planError.value = null
-  editorCityName.value = cityName
+  editingPlan.value = plan
+  editorCityName.value = plan?.city_name ?? cityName
   editorOpen.value = true
 }
 
@@ -66,7 +73,12 @@ async function onSavePlan(form: {
   savingPlan.value = true
   planError.value = null
   try {
-    await addPlan(form)
+    if (editingPlan.value) {
+      await updatePlan(editingPlan.value.city_id, form)
+    } else {
+      await addPlan(form)
+    }
+    editingPlan.value = null
     editorOpen.value = false
   } catch (e: any) {
     planError.value = e?.message ?? '保存失败，请重试。'
@@ -206,9 +218,20 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
                   <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">
                     {{ plan.city_name }}
                   </h2>
-                  <span class="text-xs text-slate-400">
-                    {{ progressOf(plan).done }}/{{ progressOf(plan).total }}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <button
+                      class="text-xs font-medium text-brand-600 active:opacity-60 flex items-center gap-1"
+                      @click="startEdit(plan)"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      编辑
+                    </button>
+                    <span class="text-xs text-slate-400">
+                      {{ progressOf(plan).done }}/{{ progressOf(plan).total }}
+                    </span>
+                  </div>
                 </div>
                 <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">{{ plan.title }}</p>
                 <!-- Progress bar -->
@@ -310,6 +333,7 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
     :saving="savingPlan"
     :error="planError"
     :initial-city-name="editorCityName"
+    :initial-plan="editingPlan"
     @save="onSavePlan"
     @request-config="emit('request-config')"
   />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import type { CityPlan } from '@/types/plan'
 
 interface DayDraft {
   date: string
@@ -14,6 +15,8 @@ const props = defineProps<{
   error?: string | null
   /** 打开表单时预填的城市名（例如从「计划中的足迹」点进来） */
   initialCityName?: string
+  /** 编辑模式下传入的完整行程，用于回填表单 */
+  initialPlan?: CityPlan | null
 }>()
 
 const emit = defineEmits<{
@@ -62,9 +65,21 @@ watch(
   () => props.modelValue,
   (v) => {
     if (v) {
-      cityName.value = props.initialCityName ?? ''
-      title.value = ''
-      days.value = [makeDay(1)]
+      const plan = props.initialPlan
+      if (plan) {
+        cityName.value = plan.city_name
+        title.value = plan.title
+        days.value = plan.days.map((d) => ({
+          date: d.date,
+          title: d.title,
+          tasks: d.tasks.map((t) => t.name),
+        }))
+        if (days.value.length === 0) days.value = [makeDay(1)]
+      } else {
+        cityName.value = props.initialCityName ?? ''
+        title.value = ''
+        days.value = [makeDay(1)]
+      }
     }
   },
 )
@@ -103,7 +118,7 @@ function submit() {
               </svg>
               返回
             </button>
-            <h1 class="text-base font-semibold text-slate-900 dark:text-slate-100">新建行程</h1>
+            <h1 class="text-base font-semibold text-slate-900 dark:text-slate-100">{{ initialPlan ? '编辑行程' : '新建行程' }}</h1>
             <button
               class="text-sm font-semibold text-brand-600 disabled:opacity-40 active:opacity-60"
               :disabled="!canSubmit || saving"

@@ -17,6 +17,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'save', form: { name: string; country: string; visited: boolean }): void
   (e: 'use-location'): void
+  (e: 'geocode-loc', query: string): void
   (e: 'request-config'): void
 }>()
 
@@ -96,15 +97,32 @@ function onDragEnd() {
   dragging = false
 }
 
-// 选点后自动填入逆地理编码识别的城市与国家
+// 选点后自动填入逆地理编码识别的城市与国家（自动填表时勿触发反向搜索）
+let autoFilling = false
 watch(
   () => props.geosuggest,
   (s) => {
     if (!s) return
+    autoFilling = true
     if (s.name) name.value = s.name
     if (s.country) country.value = s.country
+    window.setTimeout(() => {
+      autoFilling = false
+    }, 350)
   },
 )
+
+// 用户手输地区名 → 通知地图正向地理编码并同步选点（输入防抖）
+let geocodeTimer: number | undefined
+watch([name, country], ([n, c]) => {
+  if (autoFilling) return
+  const q = [n, c].filter(Boolean).join(' ').trim()
+  if (!q) return
+  window.clearTimeout(geocodeTimer)
+  geocodeTimer = window.setTimeout(() => {
+    emit('geocode-loc', q)
+  }, 600)
+})
 
 function close() {
   emit('update:modelValue', false)

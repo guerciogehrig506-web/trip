@@ -103,18 +103,25 @@ async function toggleTask(
     const payload: PlansData = { plans: plans.value }
     const jsonStr = JSON.stringify(payload, null, 2)
     const action = task.done ? 'Complete' : 'Reopen'
-    await githubService.updateFile(
+    const res = await githubService.updateFile(
       GITHUB_PATH,
       jsonStr,
       sha.value,
       `Iterate: ${action} task ${taskName} in ${cityId}`,
     )
-    // sha is stale after update; reload to get fresh sha for next edit.
-    await loadPlans()
+    // 直接用返回的最新文件 sha，避免再次拉取引发的竞态：
+    // 紧接着的下一次操作（例如误触后马上改回）不会命中过期 sha。
+    sha.value = res.contentSha
   } catch (e: any) {
     // 3. Revert on failure
     task.done = prevDone
-    syncError.value = e?.message ?? '同步失败，已回退。'
+    if (e?.status === 409) {
+      // sha 过期（GitHub 返回 409 冲突）：刷新最新数据以同步 sha，供下一次重试。
+      syncError.value = '数据已更新，请重试。'
+      await loadPlans()
+    } else {
+      syncError.value = e?.message ?? '同步失败，已回退。'
+    }
   } finally {
     syncingTaskId.value = null
   }
@@ -194,6 +201,81 @@ async function addPlan(input: {
   }
 }
 
+/**
+ * 更新已有行程计划。编辑表单只回传任务文案（无 done 状态），
+ * 因此这里按任务名匹配旧计划，尽量保留已完成/未完成勾选状态。
+ * 乐观替换本地条目，失败时回滚并抛错。
+ *
+ * Commit message: `Update: plan {title} for {city_name}`（版本标签自动附加）。
+ */
+async function updatePlan(
+  cityId: string,
+  input: {
+    city_name: string
+    title: string
+    days: { date: string; title: string; tasks: string[] }[]
+  },
+): Promise<CityPlan> {
+  const idx = plans.value.findIndex((p) => p.city_id === cityId)
+  if (idx < 0) throw new Error('行程不存在')
+
+  const old = plans.value[idx]
+  const cityName = input.city_name.trim()
+  const title = input.title.trim()
+  if (!cityName) throw new Error('请输入城市名')
+  if (!title) throw new Error('请输入行程标题')
+  if (source.value !== 'github' || !sha.value) {
+    throw new Error('未连接 GitHub，无法保存行程。请先在设置中配置仓库。')
+  }
+
+  const stamp = Date.now().toString(36)
+  const days: PlanDay[] = input.days
+    .map((d, di) => {
+      const oldDay = old.days[di]
+      // 按任务名保留勾选状态：编辑通常只是增删改文字，同名任务延续原状态
+      const doneByName = new Map<string, boolean>()
+      oldDay?.tasks.forEach((t) => doneByName.set(t.name, t.done))
+      return {
+        id: oldDay?.id ?? `${cityId}-d${di + 1}-${stamp}`,
+        date: d.date.trim(),
+        title: d.title.trim() || `Day ${di + 1}`,
+        tasks: d.tasks
+          .filter((t) => t.trim())
+          .map((t, ti) => {
+            const oldTask = oldDay?.tasks[ti]
+            const name = t.trim()
+            const done = doneByName.get(name) ?? (oldTask?.name === name ? oldTask.done : false)
+            return {
+              id: oldTask?.id ?? `${cityId}-d${di + 1}t${ti + 1}-${stamp}`,
+              name,
+              done,
+            }
+          }),
+      }
+    })
+    .filter((d) => d.date || d.tasks.length > 0)
+
+  const updated: CityPlan = { city_id: cityId, city_name: cityName, title, days }
+
+  plans.value[idx] = updated
+
+  try {
+    const payload: PlansData = { plans: plans.value }
+    const jsonStr = JSON.stringify(payload, null, 2)
+    const res = await githubService.updateFile(
+      GITHUB_PATH,
+      jsonStr,
+      sha.value,
+      `Update: plan ${title} for ${cityName}`,
+    )
+    sha.value = res.contentSha
+    return updated
+  } catch (e) {
+    plans.value[idx] = old
+    throw e
+  }
+}
+
 export function usePlans() {
   return {
     plans,
@@ -204,6 +286,7 @@ export function usePlans() {
     syncError,
     loadPlans,
     addPlan,
+    updatePlan,
     toggleTask,
   }
 }
