@@ -1,0 +1,103 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.6917, 35.6895] },
+      "properties": {
+        "id": "tokyo",
+        "name": "东京",
+        "country": "日本",
+        "visited": true,
+        "rating": 5,
+        "summary": "繁华与传统交织的都市，浅草寺的雷门与涩谷的十字路口同样令人难忘。",
+        "notes": "推荐：筑地市场早餐、上野公园赏樱、台场夜景。",
+        "log": "logs/tokyo.md"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.4737, 31.2304] },
+      "properties": {
+        "id": "shanghai",
+        "name": "上海",
+        "country": "中国",
+        "visited": true,
+        "rating": 4,
+        "summary": "外滩的万国建筑与陆家嘴的天际线隔江相望，海派风情浓郁。",
+        "notes": "推荐：武康路漫步、豫园灯会、滨江夜跑。",
+        "log": "logs/shanghai.md"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.978, 37.5665] },
+      "properties": {
+        "id": "seoul",
+        "name": "首尔",
+        "country": "韩国",
+        "visited": false,
+        "rating": 0,
+        "summary": "景福宫的古典与江南区的现代并存，街头文化活力十足。",
+        "notes": "计划中：北村韩屋村、南山首尔塔、广藏市场。",
+        "log": "logs/seoul.md"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8198, 1.3521] },
+      "properties": {
+        "id": "singapore",
+        "name": "新加坡",
+        "country": "新加坡",
+        "visited": true,
+        "rating": 5,
+        "summary": "花园城市，滨海湾金沙与超级树构成科幻般的夜景。",
+        "notes": "推荐：滨海湾花园、圣淘沙、牛车水美食。",
+        "log": "logs/singapore.md"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.3522, 48.8566] },
+      "properties": {
+        "id": "paris",
+        "name": "巴黎",
+        "country": "法国",
+        "visited": false,
+        "rating": 0,
+        "summary": "埃菲尔铁塔、卢浮宫与塞纳河，浪漫之都的代名词。",
+        "notes": "计划中：蒙马特高地、凡尔赛宫、左岸咖啡馆。",
+        "log": "logs/paris.md"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-74.006, 40.7128] },
+      "properties": {
+        "id": "newyork",
+        "name": "纽约",
+        "country": "美国",
+        "visited": false,
+        "rating": 0,
+        "summary": "不夜城，时代广场的霓虹与中央公园的宁静形成鲜明对比。",
+        "notes": "计划中：自由女神像、大都会博物馆、布鲁克林大桥。",
+        "log": "logs/newyork.md"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.2093, -33.8688] },
+      "properties": {
+        "id": "sydney",
+        "name": "悉尼",
+        "country": "澳大利亚",
+        "visited": false,
+        "rating": 0,
+        "summary": "歌剧院的白帆与海港大桥相依，邦迪海滩的冲浪文化享誉世界。",
+        "notes": "计划中：蓝山国家公园、塔龙加动物园、曼利海滩。",
+        "log": "logs/sydney.md"
+      }
+    }
+  ]
+}
