@@ -67,7 +67,6 @@ const addSheetOpen = ref(false)
 const pickedCoord = ref<[number, number] | null>(null)
 const savingCity = ref(false)
 const addError = ref<string | null>(null)
-const locateMsg = ref<string | null>(null)
 let pickedMarker: L.Marker | null = null
 
 // 选点后逆地理编码结果，用于自动填入表单
@@ -317,33 +316,6 @@ function maybePromptAmapKey() {
   emit('request-config')
 }
 
-// 底部「定位图标」：跳转到当前定位，失败时给出提示
-let locateMsgTimer: number | undefined
-function flashLocate(msg: string) {
-  locateMsg.value = msg
-  if (locateMsgTimer) window.clearTimeout(locateMsgTimer)
-  locateMsgTimer = window.setTimeout(() => {
-    locateMsg.value = null
-  }, 3000)
-}
-
-function locateMe() {
-  if (!('geolocation' in navigator)) {
-    flashLocate('当前浏览器不支持定位。')
-    return
-  }
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const { latitude, longitude } = pos.coords
-      map?.flyTo([latitude, longitude], 12)
-    },
-    () => {
-      flashLocate('无法获取定位，请检查浏览器定位权限。')
-    },
-    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
-  )
-}
-
 function onLocationFound(e: L.LocationEvent) {
   // In add mode, snap the picked coordinate to the user's location.
   if (addSheetOpen.value) {
@@ -468,7 +440,7 @@ function updatePickedMarker() {
   pickedMarker = L.marker([lat, lng], {
     icon: L.divIcon({
       className: 'picked-marker',
-      html: `<div style="width:18px;height:18px;border-radius:50%;background:#6366f1;border:3px solid #fff;box-shadow:0 0 0 5px rgba(99,102,241,0.3),0 2px 6px rgba(0,0,0,0.4);"></div>`,
+      html: `<div style="width:18px;height:18px;border-radius:50%;background:#6366f1;border:3px solid #ffffff;box-shadow:0 2px 6px rgba(0,0,0,0.45);"></div><div class="picked-pulse"></div>`,
       iconSize: [18, 18],
       iconAnchor: [9, 9],
     }),
@@ -757,31 +729,18 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Locate status toast -->
-    <Transition name="fade">
-      <div
-        v-if="locateMsg"
-        class="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-6 pointer-events-none"
-      >
-        <div class="bg-slate-900/85 text-white text-xs px-4 py-2 rounded-full shadow-lg">
-          {{ locateMsg }}
-        </div>
-      </div>
-    </Transition>
-
     <!-- Bottom floating action capsule -->
     <div class="absolute bottom-0 left-0 right-0 z-20 pb-safe">
       <div class="flex justify-center pb-5 px-4">
         <div class="flex items-center gap-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-full shadow-xl border border-slate-200/60 dark:border-slate-700/60 p-1.5">
           <button
-            class="flex items-center justify-center w-10 h-10 rounded-full active:bg-slate-100 dark:active:bg-slate-800 text-slate-600 dark:text-slate-300"
-            title="定位"
-            @click="locateMe"
+            type="button"
+            disabled
+            aria-hidden="true"
+            class="flex items-center justify-center w-10 h-10 rounded-full text-slate-300 dark:text-slate-700 cursor-default"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="7.5" stroke-width="2" />
-              <path stroke-linecap="round" stroke-width="2" d="M12 1.5V4M12 20v2.5M1.5 12H4M20 12h2.5" />
-              <circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </button>
 
@@ -853,6 +812,28 @@ onUnmounted(() => {
 .picked-marker {
   background: transparent;
   border: none;
+}
+.picked-marker .picked-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.35);
+  transform: translate(-50%, -50%);
+  animation: picked-pulse 1.6s ease-out infinite;
+}
+@keyframes picked-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.7);
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    transform: translate(-50%, -50%) scale(2.6);
+    opacity: 0;
+  }
 }
 .leaflet-control-attribution {
   font-size: 9px !important;
