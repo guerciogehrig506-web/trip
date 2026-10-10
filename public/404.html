@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Redirecting…</title>
+    <script>
+      // Single Page Apps for GitHub Pages — 404 引导脚本
+      // 参考: https://github.com/rafgraph/spa-github-pages
+      //
+      // 当用户直接访问子路径（如 /tokyo）或刷新页面时，GitHub Pages 会返回本 404 页。
+      // 这里把原始路径编码进查询串，重定向回站点首页，再由 index.html 中的脚本
+      // 解析并用 history.replaceState 还原真实地址（不会重新加载页面）。
+      (function (l) {
+        // 路径需要保留的段数：项目站点位于 username.github.io/<repo>/，因此保留仓库名前的一段
+        var pathSegmentsToKeep = 1;
+
+        var path = l.pathname.split('/').slice(pathSegmentsToKeep).join('/');
+        // 用 ~and~ 转义 & 号，避免查询串被二次拆分
+        path = path.replace(/&/g, '~and~');
+
+        var query = l.search ? l.search.slice(1).replace(/&/g, '~and~') : '';
+
+        l.replace(
+          l.protocol +
+            '//' +
+            l.hostname +
+            (l.port ? ':' + l.port : '') +
+            l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') +
+            '/?/' +
+            (path + (query ? '&' + query : '')) +
+            l.hash
+        );
+      })(window.location);
+    </script>
+  </head>
+  <body>
+    正在跳转…
+  </body>
+</html>
