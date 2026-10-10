@@ -36,6 +36,18 @@ const searchQuery = ref('')
 const visitedOnly = ref(false)
 const filterVisible = ref(false)
 
+// 全网搜索（Nominatim 正向地理编码）：用于搜索未保存的城市，如「北京/北京市/BeiJing」
+interface GeoSearchResult {
+  name: string
+  country: string
+  lat: number
+  lng: number
+  display: string
+}
+const globalResults = ref<GeoSearchResult[]>([])
+const searching = ref(false)
+let searchSeq = 0
+
 // 过滤后的城市列表：既用于地图标记，也用于搜索下拉结果
 const filteredCities = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -120,16 +132,69 @@ function onSelectResult(feature: CityFeature) {
   selectedCity.value = feature
   sheetOpen.value = true
   searchQuery.value = ''
+  globalResults.value = []
+}
+
+function onSelectGlobal(r: GeoSearchResult) {
+  map?.flyTo([r.lat, r.lng], 10)
+  searchQuery.value = ''
+  globalResults.value = []
+  addError.value = null
+}
+
+/**
+ * 正向地理编码（Nominatim search）：按关键字搜索全球城市，
+ * 支持中文（北京/北京市）与拼音/英文（BeiJing）。
+ */
+async function forwardSearch(q: string): Promise<GeoSearchResult[]> {
+  const url =
+    'https://nominatim.openstreetmap.org/search?format=jsonv2' +
+    `&q=${encodeURIComponent(q)}&limit=8&addressdetails=1&accept-language=zh`
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error('搜索失败')
+  const data = (await res.json()) as any[]
+  return data.map((d) => {
+    const a: Record<string, string> = d.address ?? {}
+    const name =
+      a.city || a.town || a.village || a.municipality || a.county || d.name || ''
+    const country = a.country || ''
+    return {
+      name,
+      country,
+      lat: Number(d.lat),
+      lng: Number(d.lon),
+      display: d.display_name || '',
+    }
+  })
+}
+
+async function runSearch() {
+  const q = searchQuery.value.trim()
+  const seq = ++searchSeq
+  if (!q) {
+    globalResults.value = []
+    searching.value = false
+    return
+  }
+  searching.value = true
+  try {
+    const results = await forwardSearch(q)
+    if (seq === searchSeq) globalResults.value = results
+  } catch {
+    if (seq === searchSeq) globalResults.value = []
+  } finally {
+    if (seq === searchSeq) searching.value = false
+  }
 }
 
 function performSearch() {
+  // 本地已保存的足迹若唯一匹配，直接定位；否则触发全网搜索。
   const results = filteredCities.value
-  if (results.length === 0) return
-  if (results.length === 1) {
+  if (searchQuery.value.trim() && results.length === 1) {
     onSelectResult(results[0])
-  } else {
-    fitFeatures(results)
+    return
   }
+  runSearch()
 }
 
 function locateMe() {
@@ -170,7 +235,7 @@ async function reverseGeocode(lng: number, lat: number) {
   if (!res.ok) throw new Error('逆地理编码失败')
   const data = await res.json()
   const a: Record<string, string> = data?.address ?? {}
-  const name =
+  let name =
     a.city ||
     a.town ||
     a.village ||
@@ -180,6 +245,12 @@ async function reverseGeocode(lng: number, lat: number) {
     a.suburb ||
     a.hamlet ||
     ''
+  // 直辖市（北京/上海/天津/重庆）在 Nominatim 中常把行政区放在 state 字段：
+  // 只要坐标落在其行政范围内，就统一识别为该城市，而非某个区县。
+  const MUNICIPALITIES = ['北京市', '上海市', '天津市', '重庆市']
+  if (!name && a.state && MUNICIPALITIES.includes(a.state)) {
+    name = a.state
+  }
   const country = a.country || ''
   if (!name && !country) throw new Error('无法识别该位置')
   return { name, country }
@@ -378,9 +449,15 @@ onUnmounted(() => {
           v-if="showResults"
           class="mt-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-lg border border-slate-200/60 dark:border-slate-700/60 overflow-hidden max-h-72 overflow-y-auto no-scrollbar"
         >
+          <!-- 全网搜索中 -->
+          <div v-if="searching" class="px-3 py-3 text-sm text-brand-600/80 animate-pulse">
+            全网搜索中…
+          </div>
+
+          <!-- 已保存足迹的匹配结果 -->
           <button
             v-for="f in filteredCities"
-            :key="f.properties.id"
+            :key="'saved-' + f.properties.id"
             class="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800 border-b border-slate-100 dark:border-slate-800 last:border-0"
             @click="onSelectResult(f)"
           >
@@ -394,7 +471,30 @@ onUnmounted(() => {
             </span>
             <span class="text-xs text-slate-400 shrink-0">定位</span>
           </button>
-          <div v-if="filteredCities.length === 0" class="px-3 py-3 text-sm text-slate-400">
+
+          <!-- 全网搜索结果 -->
+          <div v-if="globalResults.length" class="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-slate-400">
+            全网城市
+          </div>
+          <button
+            v-for="(r, i) in globalResults"
+            :key="'global-' + i"
+            class="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800 border-b border-slate-100 dark:border-slate-800 last:border-0"
+            @click="onSelectGlobal(r)"
+          >
+            <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-sky-500"></span>
+            <span class="flex-1 min-w-0">
+              <span class="text-sm font-medium text-slate-800 dark:text-slate-100">{{ r.name || r.display }}</span>
+              <span v-if="r.country" class="ml-2 text-xs text-slate-400">{{ r.country }}</span>
+            </span>
+            <span class="text-xs text-slate-400 shrink-0">定位</span>
+          </button>
+
+          <!-- 无结果 -->
+          <div
+            v-if="!searching && filteredCities.length === 0 && globalResults.length === 0"
+            class="px-3 py-3 text-sm text-slate-400"
+          >
             未找到与「{{ searchQuery }}」匹配的城市
           </div>
         </div>
@@ -461,13 +561,14 @@ onUnmounted(() => {
           <div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
           <button
-            class="flex items-center justify-center w-10 h-10 rounded-full active:bg-slate-100 dark:active:bg-slate-800 text-slate-600 dark:text-slate-300"
+            class="flex items-center gap-1.5 h-10 rounded-full pl-3 pr-3 active:bg-slate-100 dark:active:bg-slate-800 text-slate-600 dark:text-slate-300"
             title="行程计划"
             @click="plansOpen = true"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
+            <span class="text-sm font-medium">行程计划</span>
           </button>
 
           <div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
