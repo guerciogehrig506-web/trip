@@ -19,6 +19,25 @@
         "summary": "",
         "log": "logs/city-mv1vp6qa.md"
       }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          112.44383981947321,
+          34.64711679433374
+        ]
+      },
+      "properties": {
+        "id": "city-mv20f7z0",
+        "name": "洛阳市",
+        "country": "中华人民共和国",
+        "visited": false,
+        "rating": 0,
+        "summary": "",
+        "log": "logs/city-mv20f7z0.md"
+      }
     }
   ]
 }
