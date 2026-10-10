@@ -8,6 +8,9 @@ const props = defineProps<{
   source: 'github' | 'local'
   saving: boolean
   error?: string | null
+  /** 逆地理编码建议（选点后自动识别的城市/国家） */
+  geosuggest?: { name: string; country: string } | null
+  geocoding?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -34,6 +37,11 @@ const coordText = computed(() => {
   if (!props.coord) return ''
   const [lng, lat] = props.coord
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+})
+
+const suggestText = computed(() => {
+  if (!props.geosuggest) return ''
+  return [props.geosuggest.country, props.geosuggest.name].filter(Boolean).join(' · ')
 })
 
 const canSubmit = computed(
@@ -87,6 +95,16 @@ function onDragMove(e: PointerEvent) {
 function onDragEnd() {
   dragging = false
 }
+
+// 选点后自动填入逆地理编码识别的城市与国家
+watch(
+  () => props.geosuggest,
+  (s) => {
+    if (!s) return
+    if (s.name) name.value = s.name
+    if (s.country) country.value = s.country
+  },
+)
 
 function close() {
   emit('update:modelValue', false)
@@ -167,6 +185,12 @@ function submit() {
                   <span v-else class="text-slate-400">点击上方地图选择位置</span>
                 </div>
               </div>
+              <p v-if="geocoding" class="mt-1.5 text-xs text-brand-600/80 animate-pulse">
+                正在识别位置…
+              </p>
+              <p v-else-if="suggestText" class="mt-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                已识别：{{ suggestText }}
+              </p>
               <button
                 class="mt-2 flex items-center gap-1 text-xs font-medium text-brand-600 active:opacity-60"
                 @click="emit('use-location')"

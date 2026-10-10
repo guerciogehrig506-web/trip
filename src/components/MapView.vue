@@ -27,6 +27,11 @@ const savingCity = ref(false)
 const addError = ref<string | null>(null)
 let pickedMarker: L.Marker | null = null
 
+// 选点后逆地理编码结果，用于自动填入表单
+const geoSuggest = ref<{ name: string; country: string } | null>(null)
+const geocoding = ref(false)
+let geocodeSeq = 0
+
 const searchQuery = ref('')
 const visitedOnly = ref(false)
 const filterVisible = ref(false)
@@ -138,6 +143,7 @@ function onLocationFound(e: L.LocationEvent) {
     pickedCoord.value = [e.latlng.lng, e.latlng.lat]
     updatePickedMarker()
     map?.flyTo(e.latlng, 12)
+    fillFromCoord(e.latlng.lng, e.latlng.lat)
   }
 }
 
@@ -149,6 +155,49 @@ function onMapClick(e: L.LeafletMouseEvent) {
   if (!addSheetOpen.value) return
   pickedCoord.value = [e.latlng.lng, e.latlng.lat]
   updatePickedMarker()
+  fillFromCoord(e.latlng.lng, e.latlng.lat)
+}
+
+/**
+ * 逆地理编码（Nominatim）：把坐标映射为城市名 + 国家，用于自动填表。
+ * 只要坐标落在某城市的行政范围内，即返回该城市名（无需精确到某建筑）。
+ */
+async function reverseGeocode(lng: number, lat: number) {
+  const url =
+    'https://nominatim.openstreetmap.org/reverse?format=jsonv2' +
+    `&lat=${lat}&lon=${lng}&zoom=10&accept-language=zh`
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error('逆地理编码失败')
+  const data = await res.json()
+  const a: Record<string, string> = data?.address ?? {}
+  const name =
+    a.city ||
+    a.town ||
+    a.village ||
+    a.municipality ||
+    a.county ||
+    a.state_district ||
+    a.suburb ||
+    a.hamlet ||
+    ''
+  const country = a.country || ''
+  if (!name && !country) throw new Error('无法识别该位置')
+  return { name, country }
+}
+
+async function fillFromCoord(lng: number, lat: number) {
+  const seq = ++geocodeSeq
+  geocoding.value = true
+  geoSuggest.value = null
+  try {
+    const s = await reverseGeocode(lng, lat)
+    if (seq === geocodeSeq) geoSuggest.value = s
+  } catch {
+    // 识别失败时保留表单，交由用户手动填写
+    if (seq === geocodeSeq) geoSuggest.value = null
+  } finally {
+    if (seq === geocodeSeq) geocoding.value = false
+  }
 }
 
 function updatePickedMarker() {
@@ -169,6 +218,9 @@ function onAddFootprint() {
   sheetOpen.value = false
   addError.value = null
   pickedCoord.value = null
+  geoSuggest.value = null
+  geocoding.value = false
+  geocodeSeq += 1
   if (pickedMarker) {
     pickedMarker.remove()
     pickedMarker = null
@@ -446,6 +498,8 @@ onUnmounted(() => {
       :source="source"
       :saving="savingCity"
       :error="addError"
+      :geosuggest="geoSuggest"
+      :geocoding="geocoding"
       @save="onSaveFootprint"
       @use-location="onUseLocation"
       @request-config="emit('request-config')"
