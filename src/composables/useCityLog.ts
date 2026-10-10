@@ -82,7 +82,7 @@ async function appendLog(
   )
 
   content.value = newContent
-  sha.value = res.commitSha
+  sha.value = res.contentSha
   return res.version
 }
 

@@ -6,18 +6,25 @@ import { useCities } from '@/composables/useCities'
 import type { CityFeature } from '@/types/city'
 import CitySheet from './CitySheet.vue'
 import PlanTimeline from './PlanTimeline.vue'
+import AddFootprintSheet from './AddFootprintSheet.vue'
 
 const mapEl = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 const markerLayer = L.layerGroup()
 
-const { cities, loadCities, loading, source } = useCities()
+const { cities, loadCities, loading, source, addCity } = useCities()
 
 const emit = defineEmits<{ (e: 'request-config'): void }>()
 
 const sheetOpen = ref(false)
 const selectedCity = ref<CityFeature | null>(null)
 const plansOpen = ref(false)
+const addSheetOpen = ref(false)
+const pickedCoord = ref<[number, number] | null>(null)
+const savingCity = ref(false)
+const addError = ref<string | null>(null)
+let pickedMarker: L.Marker | null = null
+
 const searchQuery = ref('')
 const visitedOnly = ref(false)
 const filterVisible = ref(false)
@@ -92,18 +99,87 @@ function locateMe() {
   map.locate({ setView: true, maxZoom: 6 })
 }
 
-function onLocationFound() {
-  // could add a pulse marker here; for now just center
+function onLocationFound(e: L.LocationEvent) {
+  // In add mode, snap the picked coordinate to the user's location.
+  if (addSheetOpen.value) {
+    pickedCoord.value = [e.latlng.lng, e.latlng.lat]
+    updatePickedMarker()
+    map?.flyTo(e.latlng, 12)
+  }
 }
 
 function onLocationError() {
   // silently fall back to world view
 }
 
+function onMapClick(e: L.LeafletMouseEvent) {
+  if (!addSheetOpen.value) return
+  pickedCoord.value = [e.latlng.lng, e.latlng.lat]
+  updatePickedMarker()
+}
+
+function updatePickedMarker() {
+  if (!map || !pickedCoord.value) return
+  if (pickedMarker) pickedMarker.remove()
+  const [lng, lat] = pickedCoord.value
+  pickedMarker = L.marker([lat, lng], {
+    icon: L.divIcon({
+      className: 'picked-marker',
+      html: `<div style="width:18px;height:18px;border-radius:50%;background:#6366f1;border:3px solid #fff;box-shadow:0 0 0 5px rgba(99,102,241,0.3),0 2px 6px rgba(0,0,0,0.4);"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    }),
+  }).addTo(map)
+}
+
 function onAddFootprint() {
   sheetOpen.value = false
-  // Placeholder: adding cities will be implemented in a later module.
-  window.alert('添加足迹功能将在下一模块实现')
+  addError.value = null
+  pickedCoord.value = null
+  if (pickedMarker) {
+    pickedMarker.remove()
+    pickedMarker = null
+  }
+  addSheetOpen.value = true
+}
+
+function onUseLocation() {
+  if (!map) return
+  map.locate({ setView: true, maxZoom: 12 })
+}
+
+async function onSaveFootprint(form: {
+  name: string
+  country: string
+  visited: boolean
+}) {
+  if (!pickedCoord.value) {
+    addError.value = '请先在地图上选择一个位置。'
+    return
+  }
+  savingCity.value = true
+  addError.value = null
+  try {
+    await addCity({
+      name: form.name,
+      country: form.country,
+      coord: pickedCoord.value,
+      visited: form.visited,
+    })
+    addSheetOpen.value = false
+    totalCount.value = cities.value.length
+    visitedCount.value = cities.value.filter((c) => c.properties.visited).length
+    renderMarkers()
+    fitToCities()
+  } catch (e: any) {
+    addError.value = e?.message ?? '保存失败，请重试。'
+  } finally {
+    savingCity.value = false
+    if (pickedMarker) {
+      pickedMarker.remove()
+      pickedMarker = null
+    }
+  }
 }
 
 watch([searchQuery, visitedOnly], () => {
@@ -140,6 +216,7 @@ onMounted(async () => {
 
   map.on('locationfound', onLocationFound)
   map.on('locationerror', onLocationError)
+  map.on('click', onMapClick)
 
   // Load cities and render
   await loadCities()
@@ -280,6 +357,18 @@ onUnmounted(() => {
 
     <!-- Full-screen plans timeline -->
     <PlanTimeline v-model="plansOpen" />
+
+    <!-- Add footprint sheet -->
+    <AddFootprintSheet
+      v-model="addSheetOpen"
+      :coord="pickedCoord"
+      :source="source"
+      :saving="savingCity"
+      :error="addError"
+      @save="onSaveFootprint"
+      @use-location="onUseLocation"
+      @request-config="emit('request-config')"
+    />
   </div>
 </template>
 
@@ -294,6 +383,10 @@ onUnmounted(() => {
   touch-action: none;
 }
 .city-marker {
+  background: transparent;
+  border: none;
+}
+.picked-marker {
   background: transparent;
   border: none;
 }

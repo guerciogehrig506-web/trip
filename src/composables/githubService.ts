@@ -9,6 +9,8 @@ export interface FetchedFile {
 
 export interface UpdateResult {
   commitSha: string
+  /** 文件的新 sha（用于下一次写入），不是 commit 的 sha */
+  contentSha: string
   htmlUrl: string
   version: string
 }
@@ -131,6 +133,7 @@ export const githubService = {
 
     return {
       commitSha: data.commit.sha ?? '',
+      contentSha: data.content?.sha ?? '',
       htmlUrl: data.commit.html_url ?? '',
       version,
     }

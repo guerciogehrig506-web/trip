@@ -58,6 +58,82 @@ async function loadCities(forceLocal = false): Promise<CitiesData> {
   return { features: cities.value, sha: sha.value, source: source.value }
 }
 
+/** 由城市名生成 ASCII 安全的 id（用于文件路径 logs/{id}.md） */
+function toId(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || `city-${Date.now().toString(36)}`
+}
+
+/**
+ * Add a new city footprint. Optimistically pushes it into the local list,
+ * then writes the full cities.geojson back to GitHub. On failure the local
+ * entry is removed and the error rethrown for the UI to surface.
+ *
+ * Commit message: `Add: footprint {name} in {country}` (version tag auto).
+ */
+async function addCity(input: {
+  name: string
+  country: string
+  coord: [number, number]
+  visited: boolean
+}): Promise<CityFeature> {
+  const name = input.name.trim()
+  const country = input.country.trim()
+  if (!name) throw new Error('请输入城市名')
+  if (!country) throw new Error('请输入国家/地区')
+
+  if (source.value !== 'github' || !sha.value) {
+    throw new Error('未连接 GitHub，无法保存足迹。请先在设置中配置仓库。')
+  }
+
+  let id = toId(name)
+  if (cities.value.some((c) => c.properties.id === id)) {
+    id = `${id}-${Date.now().toString(36)}`
+  }
+
+  const feature: CityFeature = {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: input.coord },
+    properties: {
+      id,
+      name,
+      country,
+      visited: input.visited,
+      rating: 0,
+      summary: '',
+      log: `logs/${id}.md`,
+    },
+  }
+
+  // 乐观更新：先上屏
+  cities.value.push(feature)
+
+  try {
+    const payload: CitiesGeoJSON = {
+      type: 'FeatureCollection',
+      features: cities.value,
+    }
+    const jsonStr = JSON.stringify(payload, null, 2)
+    const res = await githubService.updateFile(
+      GITHUB_PATH,
+      jsonStr,
+      sha.value,
+      `Add: footprint ${name} in ${country}`,
+    )
+    sha.value = res.contentSha
+    return feature
+  } catch (e) {
+    // 失败回滚：移除刚才乐观加入的条目
+    const idx = cities.value.findIndex((c) => c.properties.id === id)
+    if (idx >= 0) cities.value.splice(idx, 1)
+    throw e
+  }
+}
+
 export function useCities() {
   return {
     cities,
@@ -66,5 +142,6 @@ export function useCities() {
     error,
     source,
     loadCities,
+    addCity,
   }
 }
