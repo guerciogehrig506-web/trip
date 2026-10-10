@@ -6,7 +6,7 @@ import { githubService } from '@/composables/githubService'
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
-const { pat, owner, repo, branch, saveConfig, clearConfig, hasConfig } =
+const { pat, owner, repo, branch, amapKey, saveConfig, clearConfig, hasConfig } =
   useConfig()
 
 const form = reactive({
@@ -14,6 +14,7 @@ const form = reactive({
   owner: owner.value,
   repo: repo.value,
   branch: branch.value,
+  amapKey: amapKey.value,
 })
 
 const saving = ref(false)
@@ -29,6 +30,7 @@ watch(
       form.owner = owner.value
       form.repo = repo.value
       form.branch = branch.value || 'main'
+      form.amapKey = amapKey.value
       testMsg.value = null
     }
   },
@@ -54,6 +56,7 @@ async function handleSave() {
       owner: form.owner.trim(),
       repo: form.repo.trim(),
       branch: form.branch.trim() || 'main',
+      amapKey: form.amapKey.trim(),
     })
     testMsg.value = { type: 'ok', text: '已保存到本地。' }
     // auto close shortly after save
@@ -108,6 +111,7 @@ function handleClear() {
   form.owner = ''
   form.repo = ''
   form.branch = 'main'
+  form.amapKey = ''
   testMsg.value = { type: 'ok', text: '已清除本地凭据。' }
 }
 </script>
@@ -132,7 +136,7 @@ function handleClear() {
           <div class="px-5 pt-2 pb-6">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                GitHub 配置
+                设置
               </h2>
               <button
                 class="text-slate-400 hover:text-slate-600 text-2xl leading-none"
@@ -201,6 +205,25 @@ function handleClear() {
                   placeholder="main"
                   class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
                 />
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    高德地图 Key（可选）
+                  </label>
+                  <span class="text-[11px] text-slate-400">用于搜索与位置识别</span>
+                </div>
+                <input
+                  v-model="form.amapKey"
+                  type="text"
+                  placeholder="在 lbs.amap.com 申请「Web 服务」类型的 Key"
+                  class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+                  autocomplete="off"
+                />
+                <p class="mt-1 text-[11px] text-slate-400">
+                  不填则搜索与位置识别回退到国际服务；建议在高德控制台把 Key 域名白名单限定为你的站点。
+                </p>
               </div>
 
               <div

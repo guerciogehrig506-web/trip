@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { usePlans } from '@/composables/usePlans'
+import { useCities } from '@/composables/useCities'
 import { useConfig } from '@/composables/useConfig'
 import type { CityPlan, PlanDay } from '@/types/plan'
 import PlanEditor from './PlanEditor.vue'
@@ -13,25 +14,47 @@ const emit = defineEmits<{
 
 const { plans, loading, error, source, syncingTaskId, syncError, loadPlans, addPlan, toggleTask } =
   usePlans()
+const { cities, loadCities } = useCities()
 const { configVersion } = useConfig()
 
 const visible = computed(() => props.modelValue)
 
 const editorOpen = ref(false)
+const editorCityName = ref('')
 const savingPlan = ref(false)
 const planError = ref<string | null>(null)
 
-// 配置保存/清除后自动重新加载行程数据（与新数据源保持一致）
+// 已状态为「计划中」、且尚未建立行程的足迹，供用户一键安排行程
+const plannedFootprints = computed(() =>
+  cities.value.filter((c) => !c.properties.visited && !hasPlan(c.properties.name)),
+)
+
+function hasPlan(name: string): boolean {
+  const n = name.trim().toLowerCase()
+  return plans.value.some((p) => p.city_name.trim().toLowerCase() === n)
+}
+
+// 配置保存/清除后自动重新加载行程与足迹数据（与新数据源保持一致）
 watch(configVersion, async () => {
-  await loadPlans()
+  await Promise.all([loadPlans(), loadCities()])
 })
 
 onMounted(async () => {
   if (plans.value.length === 0) await loadPlans()
 })
 
+// 打开行程计划时确保足迹数据已加载，以便展示「计划中的足迹」
+watch(visible, async (open) => {
+  if (open && cities.value.length === 0) await loadCities()
+})
+
 function openEditor() {
+  startPlanFor('')
+}
+
+function startPlanFor(cityName: string) {
   planError.value = null
+  editorCityName.value = cityName
   editorOpen.value = true
 }
 
@@ -132,20 +155,50 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
           <div v-else-if="error" class="text-center text-sm text-rose-500 py-10">
             {{ error }}
           </div>
-          <div v-else-if="plans.length === 0" class="text-center py-14">
-            <p class="text-sm text-slate-400 mb-4">暂无行程计划。</p>
-            <button
-              class="inline-flex items-center gap-1.5 rounded-full bg-brand-600 text-white pl-4 pr-5 py-2.5 text-sm font-semibold active:bg-brand-700"
-              @click="openEditor"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
-              新建第一个行程
-            </button>
-          </div>
 
-          <div v-else class="space-y-6">
+          <template v-else>
+            <!-- 计划中的足迹：一键安排行程 -->
+            <section v-if="plannedFootprints.length" class="mb-6">
+              <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+                计划中的足迹 · 待安排行程
+              </h2>
+              <div class="space-y-2">
+                <div
+                  v-for="c in plannedFootprints"
+                  :key="c.properties.id"
+                  class="rounded-2xl bg-white dark:bg-slate-900 p-3.5 shadow-sm border border-amber-200 dark:border-amber-900/50 flex items-center justify-between gap-3"
+                >
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{{ c.properties.name }}</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 shrink-0">计划中</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-0.5 truncate">{{ c.properties.country }}</p>
+                  </div>
+                  <button
+                    class="shrink-0 text-xs font-semibold text-brand-600 bg-brand-50 dark:bg-brand-900/30 rounded-full px-3 py-1.5 active:opacity-60"
+                    @click="startPlanFor(c.properties.name)"
+                  >
+                    安排行程
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <div v-if="plans.length === 0" class="text-center py-10">
+              <p class="text-sm text-slate-400 mb-4">暂无行程计划。</p>
+              <button
+                class="inline-flex items-center gap-1.5 rounded-full bg-brand-600 text-white pl-4 pr-5 py-2.5 text-sm font-semibold active:bg-brand-700"
+                @click="openEditor"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                新建第一个行程
+              </button>
+            </div>
+
+            <div v-else class="space-y-6">
             <section v-for="plan in plans" :key="plan.city_id" class="space-y-3">
               <!-- Plan header -->
               <div class="rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
@@ -245,6 +298,7 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
               </div>
             </section>
           </div>
+          </template>
         </div>
       </div>
     </Transition>
@@ -255,6 +309,7 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
     :source="source"
     :saving="savingPlan"
     :error="planError"
+    :initial-city-name="editorCityName"
     @save="onSavePlan"
     @request-config="emit('request-config')"
   />

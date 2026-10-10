@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   owner: 'travel_gh_owner',
   repo: 'travel_gh_repo',
   branch: 'travel_gh_branch',
+  amapKey: 'travel_amap_key',
 } as const
 
 export interface GithubConfig {
@@ -18,6 +19,8 @@ const pat = ref<string>(localStorage.getItem(STORAGE_KEYS.pat) ?? '')
 const owner = ref<string>(localStorage.getItem(STORAGE_KEYS.owner) ?? '')
 const repo = ref<string>(localStorage.getItem(STORAGE_KEYS.repo) ?? '')
 const branch = ref<string>(localStorage.getItem(STORAGE_KEYS.branch) ?? 'main')
+/** 高德地图 Web 服务 Key，用于搜索/地理编码（可选） */
+const amapKey = ref<string>(localStorage.getItem(STORAGE_KEYS.amapKey) ?? '')
 /** 每次保存/清除配置时 +1，供组件监听以重新加载数据 */
 const configVersion = ref(0)
 
@@ -25,7 +28,7 @@ const hasConfig = computed(
   () => !!pat.value && !!owner.value && !!repo.value,
 )
 
-function saveConfig(next: Partial<GithubConfig>) {
+function saveConfig(next: Partial<GithubConfig & { amapKey: string }>) {
   if (next.pat !== undefined) {
     pat.value = next.pat
     localStorage.setItem(STORAGE_KEYS.pat, next.pat)
@@ -42,6 +45,10 @@ function saveConfig(next: Partial<GithubConfig>) {
     branch.value = next.branch
     localStorage.setItem(STORAGE_KEYS.branch, next.branch)
   }
+  if (next.amapKey !== undefined) {
+    amapKey.value = next.amapKey
+    localStorage.setItem(STORAGE_KEYS.amapKey, next.amapKey)
+  }
   configVersion.value += 1
 }
 
@@ -50,6 +57,7 @@ function clearConfig() {
   owner.value = ''
   repo.value = ''
   branch.value = 'main'
+  amapKey.value = ''
   Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k))
   configVersion.value += 1
 }
@@ -60,6 +68,7 @@ export function useConfig() {
     owner,
     repo,
     branch,
+    amapKey,
     hasConfig,
     configVersion,
     saveConfig,

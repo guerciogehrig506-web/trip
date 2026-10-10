@@ -12,6 +12,8 @@ const props = defineProps<{
   source: 'github' | 'local'
   saving: boolean
   error?: string | null
+  /** 打开表单时预填的城市名（例如从「计划中的足迹」点进来） */
+  initialCityName?: string
 }>()
 
 const emit = defineEmits<{
@@ -60,7 +62,7 @@ watch(
   () => props.modelValue,
   (v) => {
     if (v) {
-      cityName.value = ''
+      cityName.value = props.initialCityName ?? ''
       title.value = ''
       days.value = [makeDay(1)]
     }

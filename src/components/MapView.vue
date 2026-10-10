@@ -56,7 +56,7 @@ function applyTileProvider() {
 }
 
 const { cities, loadCities, loading, source, addCity } = useCities()
-const { configVersion } = useConfig()
+const { configVersion, amapKey } = useConfig()
 
 const emit = defineEmits<{ (e: 'request-config'): void }>()
 
@@ -78,7 +78,7 @@ const searchQuery = ref('')
 const visitedOnly = ref(false)
 const filterVisible = ref(false)
 
-// 全网搜索（Nominatim 正向地理编码）：用于搜索未保存的城市，如「北京/北京市/BeiJing」
+// 全网搜索（优先高德，回退 Photon/Nominatim）：用于搜索未保存的城市，如「北京/北京市/BeiJing」
 interface GeoSearchResult {
   name: string
   country: string
@@ -193,6 +193,39 @@ async function fetchJson(url: string): Promise<any> {
 }
 
 /**
+ * 高德地图正向搜索（输入提示）：与高德 App 搜索框一致的联想逻辑，
+ * 支持中文/拼音，结果含坐标。未配置 Key 时返回空数组（回退到其它源）。
+ */
+async function forwardAmap(q: string): Promise<GeoSearchResult[]> {
+  const key = amapKey.value.trim()
+  if (!key) return []
+  const data = await fetchJson(
+    `https://restapi.amap.com/v3/assistant/inputtips?keywords=${encodeURIComponent(
+      q,
+    )}&key=${encodeURIComponent(key)}`,
+  )
+  if (String(data?.status) !== '1') return []
+  const tips: any[] = Array.isArray(data.tips) ? data.tips : []
+  return tips
+    .map((t) => {
+      const [lng, lat] = String(t.location ?? '')
+        .split(',')
+        .map((n: string) => Number(n))
+      const name = t.name ?? ''
+      const district = t.district ?? ''
+      if (!name || !isFinite(lng) || !isFinite(lat)) return null
+      return {
+        name,
+        country: district,
+        lat,
+        lng,
+        display: [name, district, t.address].filter(Boolean).join(' · '),
+      } as GeoSearchResult
+    })
+    .filter((r): r is GeoSearchResult => r !== null)
+}
+
+/**
  * 正向地理编码：优先 Photon（免 key、更快），失败回退 Nominatim。
  * 支持中文（北京/北京市）与拼音/英文（BeiJing）。
  */
@@ -232,7 +265,7 @@ async function forwardNominatim(q: string): Promise<GeoSearchResult[]> {
 }
 
 async function forwardSearch(q: string): Promise<GeoSearchResult[]> {
-  const providers = [forwardPhoton, forwardNominatim]
+  const providers = [forwardAmap, forwardPhoton, forwardNominatim]
   for (const p of providers) {
     try {
       const r = await p(q)
@@ -300,6 +333,29 @@ function onMapClick(e: L.LeafletMouseEvent) {
 }
 
 /**
+ * 高德逆地理编码：坐标 → 城市名 + 国家，面向中文区域更精准。
+ * 直辖市（北京/上海/天津/重庆）city 为空时回退到 province。
+ * 未配置 Key 或坐标不在国内时返回空，交由后续回退源处理。
+ */
+async function reverseAmap(
+  lat: number,
+  lng: number,
+): Promise<{ name: string; country: string }> {
+  const key = amapKey.value.trim()
+  if (!key) return { name: '', country: '' }
+  const data = await fetchJson(
+    `https://restapi.amap.com/v3/geocode/regeo?location=${lng},${lat}&key=${encodeURIComponent(
+      key,
+    )}&extensions=base`,
+  )
+  if (String(data?.status) !== '1') return { name: '', country: '' }
+  const ac = data?.regeocode?.addressComponent ?? {}
+  let name = ac.city || ''
+  if (!name && MUNICIPALITIES.includes(ac.province)) name = ac.province
+  return { name, country: ac.country || '' }
+}
+
+/**
  * 逆地理编码：把坐标映射为城市名 + 国家，用于自动填表。
  * 只要坐标落在某城市的行政范围内，即返回该城市名（无需精确到某建筑）。
  * 优先 BigDataCloud（免 key、CDN 加速），失败回退 Nominatim。
@@ -345,7 +401,7 @@ async function reverseGeocode(
   lng: number,
   lat: number,
 ): Promise<{ name: string; country: string }> {
-  const providers = [reverseBigDataCloud, reverseNominatim]
+  const providers = [reverseAmap, reverseBigDataCloud, reverseNominatim]
   for (const p of providers) {
     try {
       const r = await p(lat, lng)
@@ -436,6 +492,14 @@ async function onSaveFootprint(form: {
       pickedMarker = null
     }
   }
+}
+
+async function onDeleted() {
+  sheetOpen.value = false
+  selectedCity.value = null
+  visitedCount.value = cities.value.filter((c) => c.properties.visited).length
+  renderMarkers()
+  fitToCities()
 }
 
 watch(filteredCities, () => {
@@ -652,8 +716,8 @@ onUnmounted(() => {
             @click="locateMe"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0-6v2m0 16v2m14-10h-2M6 12H4m15.07-7.07l-1.42 1.42M6.34 17.66l-1.42 1.42m12.72 0l-1.42-1.42M6.34 6.34L4.92 4.92" />
-            </svg>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
           </button>
 
           <div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
@@ -685,7 +749,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Bottom sheet for city details -->
-    <CitySheet v-model="sheetOpen" :city="selectedCity" />
+    <CitySheet v-model="sheetOpen" :city="selectedCity" @deleted="onDeleted" />
 
     <!-- Full-screen plans timeline -->
     <PlanTimeline v-model="plansOpen" @request-config="emit('request-config')" />

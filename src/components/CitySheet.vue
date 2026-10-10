@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import type { CityFeature } from '@/types/city'
 import { useCityLog } from '@/composables/useCityLog'
+import { useCities } from '@/composables/useCities'
 import MarkdownViewer from './MarkdownViewer.vue'
 import LogEditor from './LogEditor.vue'
 
@@ -12,10 +13,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
+  (e: 'deleted'): void
 }>()
 
 const { content: logContent, loading: logLoading, error: logError, loadLog } =
   useCityLog()
+const { source, removeCity } = useCities()
+
+const confirmingDelete = ref(false)
+const deleting = ref(false)
+const deleteError = ref<string | null>(null)
 
 const sheetRef = ref<HTMLElement | null>(null)
 const translate = ref(0)
@@ -49,12 +56,16 @@ watch(
   (v) => {
     if (v) {
       expanded.value = false
+      confirmingDelete.value = false
+      deleteError.value = null
       nextTick(() => {
         if (sheetRef.value) sheetHeight.value = sheetRef.value.offsetHeight
         translate.value = 0
       })
     } else {
       translate.value = 0
+      confirmingDelete.value = false
+      deleteError.value = null
     }
   },
 )
@@ -88,6 +99,20 @@ function onAppended() {
 
 function onMaskClick(e: MouseEvent) {
   if (e.target === e.currentTarget) close()
+}
+
+async function doDelete() {
+  if (!cityId.value || deleting.value) return
+  deleting.value = true
+  deleteError.value = null
+  try {
+    await removeCity(cityId.value)
+    emit('deleted')
+  } catch (e: any) {
+    deleteError.value = e?.message ?? '删除失败，请重试。'
+  } finally {
+    deleting.value = false
+  }
 }
 
 // --- Gesture handling on the drag handle ---
@@ -246,6 +271,36 @@ function onTouchEnd() {
             <p class="text-center text-xs text-slate-400 mt-3">
               ↑ 上滑查看完整旅行日志
             </p>
+
+            <!-- 删除足迹（仅 GitHub 数据源） -->
+            <div v-if="source === 'github'" class="mt-3">
+              <div v-if="!confirmingDelete" class="flex justify-center">
+                <button
+                  class="text-xs text-slate-400 active:text-rose-500 px-2 py-1"
+                  @click="confirmingDelete = true"
+                >
+                  删除足迹
+                </button>
+              </div>
+              <div v-else class="flex items-center justify-center gap-3">
+                <span class="text-xs text-slate-400">{{ deleting ? '删除中…' : '确认删除该足迹？' }}</span>
+                <button
+                  class="text-xs font-semibold text-rose-500 disabled:opacity-50"
+                  :disabled="deleting"
+                  @click="doDelete"
+                >
+                  删除
+                </button>
+                <button
+                  class="text-xs text-slate-400"
+                  :disabled="deleting"
+                  @click="confirmingDelete = false"
+                >
+                  取消
+                </button>
+              </div>
+              <p v-if="deleteError" class="mt-1 text-center text-xs text-rose-500">{{ deleteError }}</p>
+            </div>
           </div>
 
           <!-- ============ EXPANDED: fullscreen log ============ -->

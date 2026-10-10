@@ -143,6 +143,42 @@ async function addCity(input: {
   }
 }
 
+/**
+ * 删除足迹。先本地移除，再写回 data/cities.geojson；失败时恢复并抛错。
+ * Commit message: `Remove: footprint {name}`（版本标签自动附加）。
+ */
+async function removeCity(id: string): Promise<void> {
+  const idx = cities.value.findIndex((c) => c.properties.id === id)
+  if (idx < 0) return
+
+  const removed = cities.value[idx]
+  if (source.value !== 'github' || !sha.value) {
+    throw new Error('当前为本地示例数据，无法删除足迹。')
+  }
+
+  // 乐观更新：先本地移除
+  cities.value.splice(idx, 1)
+
+  try {
+    const payload: CitiesGeoJSON = {
+      type: 'FeatureCollection',
+      features: cities.value,
+    }
+    const jsonStr = JSON.stringify(payload, null, 2)
+    const res = await githubService.updateFile(
+      GITHUB_PATH,
+      jsonStr,
+      sha.value,
+      `Remove: footprint ${removed.properties.name}`,
+    )
+    sha.value = res.contentSha
+  } catch (e) {
+    // 失败回滚：恢复刚才移除的条目
+    cities.value.splice(idx, 0, removed)
+    throw e
+  }
+}
+
 export function useCities() {
   return {
     cities,
@@ -152,5 +188,6 @@ export function useCities() {
     source,
     loadCities,
     addCity,
+    removeCity,
   }
 }
