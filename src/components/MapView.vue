@@ -13,6 +13,48 @@ const mapEl = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 const markerLayer = L.layerGroup()
 
+// 地图瓦片源（按序回退）：优先国内高德，加载失败自动切换到下一个
+const TILE_PROVIDERS: Array<{ name: string; url: string; opts: L.TileLayerOptions }> = [
+  {
+    name: '高德',
+    url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+    opts: { subdomains: '1234', maxZoom: 18, attribution: '&copy; 高德地图' },
+  },
+  {
+    name: 'Carto',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+    opts: { subdomains: 'abcd', maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' },
+  },
+  {
+    name: 'OSM',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    opts: { subdomains: 'abc', maxZoom: 19, attribution: '&copy; OpenStreetMap' },
+  },
+]
+let tileLayer: L.TileLayer | null = null
+let tileProviderIdx = 0
+let tileErrorCount = 0
+
+function applyTileProvider() {
+  if (!map) return
+  if (tileLayer) map.removeLayer(tileLayer)
+  const p = TILE_PROVIDERS[tileProviderIdx]
+  tileLayer = L.tileLayer(p.url, p.opts)
+  tileLayer.on('tileload', () => {
+    tileErrorCount = 0
+  })
+  tileLayer.on('tileerror', () => {
+    tileErrorCount += 1
+    // 连续失败达到阈值则切换到下一个瓦片源
+    if (tileErrorCount >= 8 && tileProviderIdx < TILE_PROVIDERS.length - 1) {
+      tileProviderIdx += 1
+      tileErrorCount = 0
+      applyTileProvider()
+    }
+  })
+  tileLayer.addTo(map)
+}
+
 const { cities, loadCities, loading, source, addCity } = useCities()
 const { configVersion } = useConfig()
 
@@ -142,30 +184,64 @@ function onSelectGlobal(r: GeoSearchResult) {
   addError.value = null
 }
 
+const MUNICIPALITIES = ['北京市', '上海市', '天津市', '重庆市']
+
+async function fetchJson(url: string): Promise<any> {
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 /**
- * 正向地理编码（Nominatim search）：按关键字搜索全球城市，
+ * 正向地理编码：优先 Photon（免 key、更快），失败回退 Nominatim。
  * 支持中文（北京/北京市）与拼音/英文（BeiJing）。
  */
-async function forwardSearch(q: string): Promise<GeoSearchResult[]> {
-  const url =
-    'https://nominatim.openstreetmap.org/search?format=jsonv2' +
-    `&q=${encodeURIComponent(q)}&limit=8&addressdetails=1&accept-language=zh`
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error('搜索失败')
-  const data = (await res.json()) as any[]
-  return data.map((d) => {
-    const a: Record<string, string> = d.address ?? {}
-    const name =
-      a.city || a.town || a.village || a.municipality || a.county || d.name || ''
-    const country = a.country || ''
+async function forwardPhoton(q: string): Promise<GeoSearchResult[]> {
+  const data = await fetchJson(
+    `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8&lang=zh`,
+  )
+  const features: any[] = Array.isArray(data?.features) ? data.features : []
+  return features.map((f) => {
+    const p = f.properties ?? {}
+    const [lng, lat] = f.geometry?.coordinates ?? [0, 0]
     return {
-      name,
-      country,
+      name: p.city || p.name || '',
+      country: p.country || '',
+      lat: Number(lat),
+      lng: Number(lng),
+      display: [p.name, p.city, p.state, p.country].filter(Boolean).join(' · '),
+    }
+  })
+}
+
+async function forwardNominatim(q: string): Promise<GeoSearchResult[]> {
+  const data = await fetchJson(
+    'https://nominatim.openstreetmap.org/search?format=jsonv2' +
+      `&q=${encodeURIComponent(q)}&limit=8&addressdetails=1&accept-language=zh`,
+  )
+  return data.map((d: any) => {
+    const a: Record<string, string> = d.address ?? {}
+    return {
+      name: a.city || a.town || a.village || a.municipality || a.county || d.name || '',
+      country: a.country || '',
       lat: Number(d.lat),
       lng: Number(d.lon),
       display: d.display_name || '',
     }
   })
+}
+
+async function forwardSearch(q: string): Promise<GeoSearchResult[]> {
+  const providers = [forwardPhoton, forwardNominatim]
+  for (const p of providers) {
+    try {
+      const r = await p(q)
+      if (r.length) return r
+    } catch {
+      // 尝试下一个提供商
+    }
+  }
+  return []
 }
 
 async function runSearch() {
@@ -224,16 +300,32 @@ function onMapClick(e: L.LeafletMouseEvent) {
 }
 
 /**
- * 逆地理编码（Nominatim）：把坐标映射为城市名 + 国家，用于自动填表。
+ * 逆地理编码：把坐标映射为城市名 + 国家，用于自动填表。
  * 只要坐标落在某城市的行政范围内，即返回该城市名（无需精确到某建筑）。
+ * 优先 BigDataCloud（免 key、CDN 加速），失败回退 Nominatim。
  */
-async function reverseGeocode(lng: number, lat: number) {
-  const url =
-    'https://nominatim.openstreetmap.org/reverse?format=jsonv2' +
-    `&lat=${lat}&lon=${lng}&zoom=10&accept-language=zh`
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error('逆地理编码失败')
-  const data = await res.json()
+async function reverseBigDataCloud(
+  lat: number,
+  lng: number,
+): Promise<{ name: string; country: string }> {
+  const d = await fetchJson(
+    `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=zh`,
+  )
+  let name: string = d?.city || d?.locality || ''
+  if (!name && MUNICIPALITIES.includes(d?.principalSubdivision)) {
+    // 直辖市坐标落在区县时，principalSubdivision 即城市级行政区
+    name = d.principalSubdivision
+  }
+  return { name, country: d?.countryName || '' }
+}
+
+async function reverseNominatim(
+  lat: number,
+  lng: number,
+): Promise<{ name: string; country: string }> {
+  const data = await fetchJson(
+    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&accept-language=zh`,
+  )
   const a: Record<string, string> = data?.address ?? {}
   let name =
     a.city ||
@@ -245,15 +337,24 @@ async function reverseGeocode(lng: number, lat: number) {
     a.suburb ||
     a.hamlet ||
     ''
-  // 直辖市（北京/上海/天津/重庆）在 Nominatim 中常把行政区放在 state 字段：
-  // 只要坐标落在其行政范围内，就统一识别为该城市，而非某个区县。
-  const MUNICIPALITIES = ['北京市', '上海市', '天津市', '重庆市']
-  if (!name && a.state && MUNICIPALITIES.includes(a.state)) {
-    name = a.state
+  if (!name && a.state && MUNICIPALITIES.includes(a.state)) name = a.state
+  return { name, country: a.country || '' }
+}
+
+async function reverseGeocode(
+  lng: number,
+  lat: number,
+): Promise<{ name: string; country: string }> {
+  const providers = [reverseBigDataCloud, reverseNominatim]
+  for (const p of providers) {
+    try {
+      const r = await p(lat, lng)
+      if (r.name || r.country) return r
+    } catch {
+      // 尝试下一个提供商
+    }
   }
-  const country = a.country || ''
-  if (!name && !country) throw new Error('无法识别该位置')
-  return { name, country }
+  throw new Error('无法识别该位置')
 }
 
 async function fillFromCoord(lng: number, lat: number) {
@@ -371,10 +472,7 @@ onMounted(async () => {
     worldCopyJump: true,
   })
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap',
-  }).addTo(map)
+  applyTileProvider()
 
   markerLayer.addTo(map)
 
@@ -590,7 +688,7 @@ onUnmounted(() => {
     <CitySheet v-model="sheetOpen" :city="selectedCity" />
 
     <!-- Full-screen plans timeline -->
-    <PlanTimeline v-model="plansOpen" />
+    <PlanTimeline v-model="plansOpen" @request-config="emit('request-config')" />
 
     <!-- Add footprint sheet -->
     <AddFootprintSheet

@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { githubService } from './githubService'
 import { useConfig } from './useConfig'
-import type { CityPlan, PlansData } from '@/types/plan'
+import type { CityPlan, PlanDay, PlansData } from '@/types/plan'
 
 const GITHUB_PATH = 'data/plans.json'
 const LOCAL_FALLBACK = `${import.meta.env.BASE_URL}sample-plans.json`
@@ -120,6 +120,80 @@ async function toggleTask(
   }
 }
 
+/** 由城市名生成 ASCII 安全的 id（用于计划 city_id） */
+function toId(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || `plan-${Date.now().toString(36)}`
+}
+
+/**
+ * 新建行程计划。乐观地推入本地列表，然后把完整 plans.json 写回 GitHub。
+ * 失败时移除本地条目并抛出错误供 UI 展示。
+ *
+ * Commit message: `Add: plan {title} for {city_name}`（版本标签自动附加）。
+ */
+async function addPlan(input: {
+  city_name: string
+  title: string
+  days: { date: string; title: string; tasks: string[] }[]
+}): Promise<CityPlan> {
+  const cityName = input.city_name.trim()
+  const title = input.title.trim()
+  if (!cityName) throw new Error('请输入城市名')
+  if (!title) throw new Error('请输入行程标题')
+
+  if (source.value !== 'github') {
+    throw new Error('未连接 GitHub，无法保存行程。请先在设置中配置仓库。')
+  }
+
+  let cityId = toId(cityName)
+  if (plans.value.some((p) => p.city_id === cityId)) {
+    cityId = `${cityId}-${Date.now().toString(36)}`
+  }
+
+  const stamp = Date.now().toString(36)
+  const days: PlanDay[] = input.days
+    .map((d, di) => ({
+      id: `${cityId}-d${di + 1}-${stamp}`,
+      date: d.date.trim(),
+      title: d.title.trim() || `Day ${di + 1}`,
+      tasks: d.tasks
+        .filter((t) => t.trim())
+        .map((t, ti) => ({
+          id: `${cityId}-d${di + 1}t${ti + 1}-${stamp}`,
+          name: t.trim(),
+          done: false,
+        })),
+    }))
+    .filter((d) => d.date || d.tasks.length > 0)
+
+  const plan: CityPlan = { city_id: cityId, city_name: cityName, title, days }
+
+  // 乐观更新
+  plans.value.push(plan)
+
+  try {
+    const payload: PlansData = { plans: plans.value }
+    const jsonStr = JSON.stringify(payload, null, 2)
+    const res = await githubService.updateFile(
+      GITHUB_PATH,
+      jsonStr,
+      sha.value,
+      `Add: plan ${title} for ${cityName}`,
+    )
+    sha.value = res.contentSha
+    return plan
+  } catch (e) {
+    const idx = plans.value.findIndex((p) => p.city_id === cityId)
+    if (idx >= 0) plans.value.splice(idx, 1)
+    throw e
+  }
+}
+
 export function usePlans() {
   return {
     plans,
@@ -129,6 +203,7 @@ export function usePlans() {
     syncingTaskId,
     syncError,
     loadPlans,
+    addPlan,
     toggleTask,
   }
 }

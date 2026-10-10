@@ -1,19 +1,56 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { usePlans } from '@/composables/usePlans'
+import { useConfig } from '@/composables/useConfig'
 import type { CityPlan, PlanDay } from '@/types/plan'
+import PlanEditor from './PlanEditor.vue'
 
 const props = defineProps<{ modelValue: boolean }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
+const emit = defineEmits<{
+  (e: 'update:modelValue', v: boolean): void
+  (e: 'request-config'): void
+}>()
 
-const { plans, loading, error, source, syncingTaskId, syncError, loadPlans, toggleTask } =
+const { plans, loading, error, source, syncingTaskId, syncError, loadPlans, addPlan, toggleTask } =
   usePlans()
+const { configVersion } = useConfig()
 
 const visible = computed(() => props.modelValue)
+
+const editorOpen = ref(false)
+const savingPlan = ref(false)
+const planError = ref<string | null>(null)
+
+// 配置保存/清除后自动重新加载行程数据（与新数据源保持一致）
+watch(configVersion, async () => {
+  await loadPlans()
+})
 
 onMounted(async () => {
   if (plans.value.length === 0) await loadPlans()
 })
+
+function openEditor() {
+  planError.value = null
+  editorOpen.value = true
+}
+
+async function onSavePlan(form: {
+  city_name: string
+  title: string
+  days: { date: string; title: string; tasks: string[] }[]
+}) {
+  savingPlan.value = true
+  planError.value = null
+  try {
+    await addPlan(form)
+    editorOpen.value = false
+  } catch (e: any) {
+    planError.value = e?.message ?? '保存失败，请重试。'
+  } finally {
+    savingPlan.value = false
+  }
+}
 
 function close() {
   emit('update:modelValue', false)
@@ -55,15 +92,26 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
               地图
             </button>
             <h1 class="text-base font-semibold text-slate-900 dark:text-slate-100">行程计划</h1>
-            <div
-              class="text-xs px-2 py-0.5 rounded-full"
-              :class="
-                source === 'github'
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-              "
-            >
-              {{ source === 'github' ? '已同步' : '本地' }}
+            <div class="flex items-center gap-2">
+              <button
+                class="w-8 h-8 rounded-full bg-brand-600 text-white flex items-center justify-center active:bg-brand-700"
+                title="新建行程"
+                @click="openEditor"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <div
+                class="text-xs px-2 py-0.5 rounded-full"
+                :class="
+                  source === 'github'
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                "
+              >
+                {{ source === 'github' ? '已同步' : '本地' }}
+              </div>
             </div>
           </div>
         </div>
@@ -84,8 +132,17 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
           <div v-else-if="error" class="text-center text-sm text-rose-500 py-10">
             {{ error }}
           </div>
-          <div v-else-if="plans.length === 0" class="text-center text-sm text-slate-400 py-10">
-            暂无行程计划。
+          <div v-else-if="plans.length === 0" class="text-center py-14">
+            <p class="text-sm text-slate-400 mb-4">暂无行程计划。</p>
+            <button
+              class="inline-flex items-center gap-1.5 rounded-full bg-brand-600 text-white pl-4 pr-5 py-2.5 text-sm font-semibold active:bg-brand-700"
+              @click="openEditor"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              新建第一个行程
+            </button>
           </div>
 
           <div v-else class="space-y-6">
@@ -192,6 +249,15 @@ function handleToggle(plan: CityPlan, day: PlanDay, taskId: string) {
       </div>
     </Transition>
   </Teleport>
+
+  <PlanEditor
+    v-model="editorOpen"
+    :source="source"
+    :saving="savingPlan"
+    :error="planError"
+    @save="onSavePlan"
+    @request-config="emit('request-config')"
+  />
 </template>
 
 <style scoped>
