@@ -4,7 +4,7 @@ import { useConfig } from './useConfig'
 import type { CitiesData, CitiesGeoJSON, CityFeature } from '@/types/city'
 
 const GITHUB_PATH = 'data/cities.geojson'
-const LOCAL_FALLBACK = '/sample-cities.geojson'
+const LOCAL_FALLBACK = `${import.meta.env.BASE_URL}sample-cities.geojson`
 
 const cities = ref<CityFeature[]>([])
 const sha = ref<string>('')

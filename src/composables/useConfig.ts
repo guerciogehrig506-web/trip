@@ -18,6 +18,8 @@ const pat = ref<string>(localStorage.getItem(STORAGE_KEYS.pat) ?? '')
 const owner = ref<string>(localStorage.getItem(STORAGE_KEYS.owner) ?? '')
 const repo = ref<string>(localStorage.getItem(STORAGE_KEYS.repo) ?? '')
 const branch = ref<string>(localStorage.getItem(STORAGE_KEYS.branch) ?? 'main')
+/** 每次保存/清除配置时 +1，供组件监听以重新加载数据 */
+const configVersion = ref(0)
 
 const hasConfig = computed(
   () => !!pat.value && !!owner.value && !!repo.value,
@@ -40,6 +42,7 @@ function saveConfig(next: Partial<GithubConfig>) {
     branch.value = next.branch
     localStorage.setItem(STORAGE_KEYS.branch, next.branch)
   }
+  configVersion.value += 1
 }
 
 function clearConfig() {
@@ -48,6 +51,7 @@ function clearConfig() {
   repo.value = ''
   branch.value = 'main'
   Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k))
+  configVersion.value += 1
 }
 
 export function useConfig() {
@@ -57,6 +61,7 @@ export function useConfig() {
     repo,
     branch,
     hasConfig,
+    configVersion,
     saveConfig,
     clearConfig,
   }

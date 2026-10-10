@@ -4,7 +4,7 @@ import { useConfig } from './useConfig'
 import type { CityPlan, PlansData } from '@/types/plan'
 
 const GITHUB_PATH = 'data/plans.json'
-const LOCAL_FALLBACK = '/sample-plans.json'
+const LOCAL_FALLBACK = `${import.meta.env.BASE_URL}sample-plans.json`
 
 const plans = ref<CityPlan[]>([])
 const sha = ref<string>('')

@@ -25,7 +25,7 @@ async function loadLog(path: string): Promise<void> {
       sha.value = file.sha
       source.value = 'github'
     } else {
-      const res = await fetch(`/${path}`)
+      const res = await fetch(`${import.meta.env.BASE_URL}${path}`)
       if (!res.ok) throw new Error(`本地日志不存在：${path}`)
       content.value = await res.text()
       sha.value = ''
@@ -38,7 +38,7 @@ async function loadLog(path: string): Promise<void> {
     // Try local fallback when GitHub fetch fails
     if (source.value === 'github') {
       try {
-        const res = await fetch(`/${path}`)
+        const res = await fetch(`${import.meta.env.BASE_URL}${path}`)
         if (res.ok) {
           content.value = await res.text()
           source.value = 'local'

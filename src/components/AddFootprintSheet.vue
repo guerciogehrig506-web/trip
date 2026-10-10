@@ -49,10 +49,6 @@ function close() {
   emit('update:modelValue', false)
 }
 
-function onMaskClick(e: MouseEvent) {
-  if (e.target === e.currentTarget) close()
-}
-
 function submit() {
   if (!canSubmit.value) return
   emit('save', {
@@ -68,13 +64,13 @@ function submit() {
     <Transition name="sheet">
       <div
         v-if="modelValue"
-        class="fixed inset-0 z-50 flex items-end justify-center"
+        class="fixed inset-0 z-50 flex items-end justify-center pointer-events-none"
       >
-        <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/50" @click="onMaskClick"></div>
+        <!-- Backdrop：仅视觉变暗，点击穿透到地图以便选点 -->
+        <div class="absolute inset-0 bg-black/30 pointer-events-none"></div>
 
         <!-- Sheet -->
-        <div class="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl overflow-hidden flex flex-col">
+        <div class="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto">
           <!-- Drag handle -->
           <div class="flex justify-center pt-3 pb-1 shrink-0">
             <div class="h-1.5 w-10 rounded-full bg-slate-300 dark:bg-slate-600"></div>

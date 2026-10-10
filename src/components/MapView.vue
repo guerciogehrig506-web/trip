@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useCities } from '@/composables/useCities'
+import { useConfig } from '@/composables/useConfig'
 import type { CityFeature } from '@/types/city'
 import CitySheet from './CitySheet.vue'
 import PlanTimeline from './PlanTimeline.vue'
@@ -13,6 +14,7 @@ let map: L.Map | null = null
 const markerLayer = L.layerGroup()
 
 const { cities, loadCities, loading, source, addCity } = useCities()
+const { configVersion } = useConfig()
 
 const emit = defineEmits<{ (e: 'request-config'): void }>()
 
@@ -184,6 +186,16 @@ async function onSaveFootprint(form: {
 
 watch([searchQuery, visitedOnly], () => {
   renderMarkers()
+})
+
+// 配置保存/清除后自动重新加载城市数据，
+// 使「去配置连接 GitHub」/「添加足迹」按钮与数据源状态同步刷新。
+watch(configVersion, async () => {
+  await loadCities()
+  totalCount.value = cities.value.length
+  visitedCount.value = cities.value.filter((c) => c.properties.visited).length
+  renderMarkers()
+  fitToCities()
 })
 
 onMounted(async () => {
