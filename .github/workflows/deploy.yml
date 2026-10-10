@@ -10,10 +10,12 @@ on:
   workflow_dispatch:
 
 # 设置 GitHub Pages 部署所需的权限
+# administration: write 用于首次运行时自动启用 Pages（enablement）
 permissions:
   contents: read
   pages: write
   id-token: write
+  administration: write
 
 # 同一时间只保留一个部署，避免并发冲突
 concurrency:
