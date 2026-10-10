@@ -1,0 +1,95 @@
+{
+  "plans": [
+    {
+      "city_id": "tokyo",
+      "city_name": "东京",
+      "title": "东京 5 日赏樱行程",
+      "days": [
+        {
+          "id": "tk-d1",
+          "date": "2026-04-01",
+          "title": "Day 1 · 浅草与上野",
+          "tasks": [
+            { "id": "tk-t1", "name": "成田机场 Skyliner 到上野", "done": true },
+            { "id": "tk-t2", "name": "浅草寺 + 仲见世通", "done": true },
+            { "id": "tk-t3", "name": "上野公园赏樱野餐", "done": false },
+            { "id": "tk-t4", "name": "阿美横丁晚餐", "done": false }
+          ]
+        },
+        {
+          "id": "tk-d2",
+          "date": "2026-04-02",
+          "title": "Day 2 · 涩谷与原宿",
+          "tasks": [
+            { "id": "tk-t5", "name": "涩谷十字路口 + 星巴克观景", "done": false },
+            { "id": "tk-t6", "name": "原宿竹下通逛街", "done": false },
+            { "id": "tk-t7", "name": "明治神宫参拜", "done": false },
+            { "id": "tk-t8", "name": "表参道晚餐", "done": false }
+          ]
+        },
+        {
+          "id": "tk-d3",
+          "date": "2026-04-03",
+          "title": "Day 3 · 台场夜景",
+          "tasks": [
+            { "id": "tk-t9", "name": "台场高达立像", "done": false },
+            { "id": "tk-t10", "name": "海滨公园彩虹桥夜景", "done": false }
+          ]
+        }
+      ]
+    },
+    {
+      "city_id": "shanghai",
+      "city_name": "上海",
+      "title": "上海 3 日周末游",
+      "days": [
+        {
+          "id": "sh-d1",
+          "date": "2026-03-15",
+          "title": "Day 1 · 外滩与陆家嘴",
+          "tasks": [
+            { "id": "sh-t1", "name": "南京路步行街", "done": true },
+            { "id": "sh-t2", "name": "外滩万国建筑群", "done": true },
+            { "id": "sh-t3", "name": "陆家嘴夜景", "done": false }
+          ]
+        },
+        {
+          "id": "sh-d2",
+          "date": "2026-03-16",
+          "title": "Day 2 · 武康路漫步",
+          "tasks": [
+            { "id": "sh-t4", "name": "武康大楼打卡", "done": false },
+            { "id": "sh-t5", "name": "武康路咖啡馆", "done": false },
+            { "id": "sh-t6", "name": "豫园灯会", "done": false }
+          ]
+        }
+      ]
+    },
+    {
+      "city_id": "seoul",
+      "city_name": "首尔",
+      "title": "首尔 4 日计划",
+      "days": [
+        {
+          "id": "se-d1",
+          "date": "2026-05-10",
+          "title": "Day 1 · 景福宫与北村",
+          "tasks": [
+            { "id": "se-t1", "name": "景福宫换岗仪式", "done": false },
+            { "id": "se-t2", "name": "北村韩屋村漫步", "done": false },
+            { "id": "se-t3", "name": "广藏市场绿豆煎饼", "done": false }
+          ]
+        },
+        {
+          "id": "se-d2",
+          "date": "2026-05-11",
+          "title": "Day 2 · 南山与明洞",
+          "tasks": [
+            { "id": "se-t4", "name": "南山首尔塔", "done": false },
+            { "id": "se-t5", "name": "明洞购物", "done": false }
+          ]
+        }
+      ]
+    }
+  ]
+}

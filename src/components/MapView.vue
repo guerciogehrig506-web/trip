@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import { useCities } from '@/composables/useCities'
 import type { CityFeature } from '@/types/city'
 import CitySheet from './CitySheet.vue'
+import PlanTimeline from './PlanTimeline.vue'
 
 const mapEl = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
@@ -16,6 +17,7 @@ const emit = defineEmits<{ (e: 'request-config'): void }>()
 
 const sheetOpen = ref(false)
 const selectedCity = ref<CityFeature | null>(null)
+const plansOpen = ref(false)
 const searchQuery = ref('')
 const visitedOnly = ref(false)
 const filterVisible = ref(false)
@@ -249,6 +251,18 @@ onUnmounted(() => {
           <div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
           <button
+            class="flex items-center justify-center w-10 h-10 rounded-full active:bg-slate-100 dark:active:bg-slate-800 text-slate-600 dark:text-slate-300"
+            title="行程计划"
+            @click="plansOpen = true"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </button>
+
+          <div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
+
+          <button
             class="flex items-center gap-1.5 bg-brand-600 text-white rounded-full pl-3 pr-4 py-2 active:bg-brand-700"
             @click="onAddFootprint"
           >
@@ -263,6 +277,9 @@ onUnmounted(() => {
 
     <!-- Bottom sheet for city details -->
     <CitySheet v-model="sheetOpen" :city="selectedCity" />
+
+    <!-- Full-screen plans timeline -->
+    <PlanTimeline v-model="plansOpen" />
   </div>
 </template>
 
